@@ -41,7 +41,6 @@ public abstract class AbstractExpressionProcessor extends AbstractProcessor
     Types types;
     Elements elements;
     private final List<ClassInfo> classInfos = new ArrayList<>();
-
     @Override
     public Set<String> getSupportedAnnotationTypes()
     {
@@ -117,7 +116,7 @@ public abstract class AbstractExpressionProcessor extends AbstractProcessor
                 MethodInfo methodInfo = new MethodInfo(method.getName(), method.getReturnType().getCanonicalName());
                 for (Parameter parameter : method.getParameters())
                 {
-                    ParamInfo paramInfo = new ParamInfo(parameter.getType().getCanonicalName(), 0);
+                    ParamInfo paramInfo = new ParamInfo(parameter.getType().getCanonicalName());
                     methodInfo.getParamInfos().add(paramInfo);
                 }
                 classInfo.getMethodInfos().add(methodInfo);
@@ -133,11 +132,11 @@ public abstract class AbstractExpressionProcessor extends AbstractProcessor
                         Class<?> parameterType = parameter.getType();
                         if (isFunctionInterFace(parameterType))
                         {
-                            paramInfo = new ParamInfo(parameterType.getCanonicalName(), getFunctionParamCount(parameterType));
+                            paramInfo = new ParamInfo(parameterType.getCanonicalName());
                         }
                         else
                         {
-                            paramInfo = new ParamInfo(parameterType.getCanonicalName(), 0);
+                            paramInfo = new ParamInfo(parameterType.getCanonicalName());
                         }
                         if (parameter.isAnnotationPresent(Expression.class))
                         {
@@ -194,6 +193,11 @@ public abstract class AbstractExpressionProcessor extends AbstractProcessor
         expressionMap.put(IExpression.Type.Reference, treeMaker.Select(iExpression, names.fromString("reference")));
         expressionMap.put(IExpression.Type.Block, treeMaker.Select(iExpression, names.fromString("block")));
         expressionMap.put(IExpression.Type.Assign, treeMaker.Select(iExpression, names.fromString("assign")));
+        expressionMap.put(IExpression.Type.Var, treeMaker.Select(iExpression, names.fromString("var")));
+        expressionMap.put(IExpression.Type.ArrayAccess, treeMaker.Select(iExpression, names.fromString("arrayAccess")));
+        expressionMap.put(IExpression.Type.If, treeMaker.Select(iExpression, names.fromString("If")));
+        expressionMap.put(IExpression.Type.LocalReference, treeMaker.Select(iExpression, names.fromString("localReference")));
+        expressionMap.put(IExpression.Type.Return, treeMaker.Select(iExpression, names.fromString("Return")));
     }
 
     @Override
@@ -247,7 +251,7 @@ public abstract class AbstractExpressionProcessor extends AbstractProcessor
                         {
                             returnStr = ((JCTree.JCTypeApply) returnType).getType().toString();
                         }
-                        returnStr = getFullName(returnStr, currentClassInfo.getImportInfos());
+                        returnStr = findFullName(returnStr, currentClassInfo);
                         MethodInfo methodInfo = new MethodInfo(methodDecl.getName().toString(), returnStr);
                         for (JCTree.JCVariableDecl parameter : methodDecl.getParameters())
                         {
@@ -258,8 +262,8 @@ public abstract class AbstractExpressionProcessor extends AbstractProcessor
                                 JCTree.JCTypeApply typeApply = (JCTree.JCTypeApply) parameterType;
                                 parameterStr = typeApply.getType().toString();
                             }
-                            parameterStr = getFullName(parameterStr, currentClassInfo.getImportInfos());
-                            ParamInfo paramInfo = new ParamInfo(parameterStr, getParamCount(parameterStr));
+                            parameterStr = findFullName(parameterStr, currentClassInfo);
+                            ParamInfo paramInfo = new ParamInfo(parameterStr);
                             com.sun.tools.javac.util.List<JCTree.JCAnnotation> annotationList = parameter.getModifiers().getAnnotations();
                             for (JCTree.JCAnnotation annotation : annotationList)
                             {
@@ -310,7 +314,7 @@ public abstract class AbstractExpressionProcessor extends AbstractProcessor
                     if (member instanceof JCTree.JCVariableDecl)
                     {
                         JCTree.JCVariableDecl variable = (JCTree.JCVariableDecl) member;
-                        String typeName = getFullName(variable.getType().toString(), currentClassInfo.getImportInfos());
+                        String typeName = findFullName(variable.getType().toString(), currentClassInfo);
                         varInfos.add(new VarInfo(0, variable.getName().toString(), typeName));
                     }
                 }
@@ -324,71 +328,37 @@ public abstract class AbstractExpressionProcessor extends AbstractProcessor
         return false;
     }
 
-    private String getFullName(String returnStr, List<ImportInfo> imports)
+    private String findFullName(String typeName,ClassInfo currentClassInfo)
     {
-        if (returnStr.contains("."))
+        String[] typeSp = typeName.split("\\.");
+        StringBuilder sb = new StringBuilder();
+        for (ImportInfo Import : currentClassInfo.getImportInfos())
         {
-            String[] sped = returnStr.split("\\.");
-            for (ImportInfo importInfo : imports)
+            String importName = Import.getImportName();
+            String[] sp = importName.split("\\.");
+            if (sp[sp.length - 1].equals(typeSp[0]))
             {
-                String imp = importInfo.getImportName();
-                String[] split = imp.split("\\.");
-                if (split[split.length - 1].equals(sped[0]))
+                sb.append(importName);
+                for (int i = 1; i < typeSp.length; i++)
                 {
-                    StringBuilder sb = new StringBuilder();
-                    sb.append(imp);
-                    for (int i = 1; i < sped.length; i++)
-                    {
-                        sb.append(".").append(sped[i]);
-                    }
-                    returnStr = sb.toString();
+                    sb.append(".").append(typeSp[i]);
                 }
-                else if (split[split.length - 1].equals("*"))
-                {
-                    String sub = imp.substring(0, imp.length() - 2);
-                    boolean sus = false;
-                    for (ClassInfo classInfo : classInfos)
-                    {
-                        if (classInfo.getPackageName().equals(sub))
-                        {
-                            returnStr = classInfo.getPackageName() + "." + returnStr;
-                            sus = true;
-                            break;
-                        }
-                    }
-                    if (sus) break;
-                }
+                break;
             }
         }
-        else
+        if (sb.length() != 0)
         {
-            for (ImportInfo importInfo : imports)
+            return sb.toString();
+        }
+        String fullName = currentClassInfo.getPackageName() + "." + typeName;
+        for (ClassInfo classInfo : classInfos)
+        {
+            if (classInfo.getFullName().equals(fullName))
             {
-                String imp = importInfo.getImportName();
-                String[] split = imp.split("\\.");
-                if (split[split.length - 1].equals(returnStr))
-                {
-                    returnStr = imp;
-                    break;
-                }
-                else if (split[split.length - 1].equals("*"))
-                {
-                    String sub = imp.substring(0, imp.length() - 2);
-                    boolean sus = false;
-                    for (ClassInfo classInfo : classInfos)
-                    {
-                        if (classInfo.getPackageName().equals(sub))
-                        {
-                            returnStr = classInfo.getPackageName() + "." + returnStr;
-                            sus = true;
-                            break;
-                        }
-                    }
-                    if (sus) break;
-                }
+                return classInfo.getFullName();
             }
         }
-        return returnStr;
+        return typeName;
     }
 
     private int getParamCount(String typeName)

@@ -60,11 +60,34 @@ public interface IExpression
         return new AssignExpression(left, right);
     }
 
+    public static VarExpression var(String name, IExpression init)
+    {
+        return new VarExpression(name, init);
+    }
+
+    public static ArrayAccessExpression arrayAccess(IExpression indexed, IExpression index)
+    {
+        return new ArrayAccessExpression(indexed, index);
+    }
+
+    public static IfExpression If(IExpression condition, IExpression body, IExpression elSe)
+    {
+        return new IfExpression(condition, body, elSe);
+    }
+
+    public static LocalReferenceExpression localReference(String name)
+    {
+        return new LocalReferenceExpression(name);
+    }
+    public static ReturnExpression Return(IExpression expression)
+    {
+        return new ReturnExpression(expression);
+    }
     enum Type
     {
-        Binary, Value, Unary, New,
-        Parens, FieldSelect, MethodCall,
-        Reference, Block, Assign,
+        Binary, Value, Unary, New, Parens, FieldSelect, MethodCall,
+        Reference, Block, Assign, Var, ArrayAccess, If, LocalReference,
+        Return,
         ;
     }
 }
