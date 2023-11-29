@@ -371,10 +371,23 @@ public class ExpressionTranslator extends TreeTranslator
                 }
             }
             //再看看远处的理塘吧家人们
-            String fullName = currentClassInfo.getPackageName() + "." + id;
+            String[] spe=id.split("\\.");
+            String fullName = currentClassInfo.getPackageName() + "." + spe[0];
             for (ClassInfo classInfo : classInfos)
             {
                 if (classInfo.getFullName().equals(fullName))
+                {
+                    return treeMaker.Apply(
+                            List.nil(),
+                            expressionMap.get(IExpression.Type.Reference),
+                            List.of(treeMaker.Select(ident, names._class))
+                    );
+                }
+            }
+
+            for (ImportInfo importInfo : currentClassInfo.getImportInfos())
+            {
+                if (importInfo.getImportName().equals(spe[0]))
                 {
                     return treeMaker.Apply(
                             List.nil(),
@@ -604,10 +617,5 @@ public class ExpressionTranslator extends TreeTranslator
             }
         }
         return typeName;
-    }
-
-    private ClassInfo getClassInfo()
-    {
-        return null;
     }
 }
