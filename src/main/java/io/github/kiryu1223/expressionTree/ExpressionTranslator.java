@@ -149,7 +149,7 @@ public class ExpressionTranslator extends TreeTranslator
                 for (int i = 0; i < paramInfos.size(); i++)
                 {
                     JCTree.JCExpression expression = arguments.get(i);
-                    if (!(expression instanceof JCTree.JCLambda)) continue;
+                    if (expression.getKind() != Tree.Kind.LAMBDA_EXPRESSION) continue;
                     JCTree.JCLambda jcLambda = (JCTree.JCLambda) expression;
                     ParamInfo paramInfo = paramInfos.get(i);
                     if (!paramInfo.isExpressionParam()) continue;
@@ -586,7 +586,7 @@ public class ExpressionTranslator extends TreeTranslator
             JCTree.JCExpression body = doStart(foreach.getStatement());
             return treeMaker.App(
                     expressionMap.get(IExpression.Type.Foreach),
-                    List.of(var,expr,body)
+                    List.of(var, expr, body)
             );
         }
         else if (tree instanceof JCTree.JCForLoop)
@@ -600,7 +600,7 @@ public class ExpressionTranslator extends TreeTranslator
             JCTree.JCExpression expr = doStart(whileLoop.getStatement());
             return treeMaker.App(
                     expressionMap.get(IExpression.Type.While),
-                    List.of(cond,expr)
+                    List.of(cond, expr)
             );
         }
         else if (tree instanceof JCTree.JCSwitch)
