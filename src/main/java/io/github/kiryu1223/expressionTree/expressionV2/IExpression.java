@@ -79,15 +79,67 @@ public interface IExpression
     {
         return new LocalReferenceExpression(name);
     }
+
     public static ReturnExpression Return(IExpression expression)
     {
         return new ReturnExpression(expression);
     }
+
+    public static BreakExpression Break()
+    {
+        return new BreakExpression();
+    }
+
+    public static ContinueExpression Continue()
+    {
+        return new ContinueExpression();
+    }
+
+    public static SwitchExpression Switch(IExpression selector, CaseExpression... cases)
+    {
+        return new SwitchExpression(selector, Arrays.asList(cases));
+    }
+
+    public static CaseExpression Case(IExpression part, IExpression... stats)
+    {
+        return new CaseExpression(part, Arrays.asList(stats));
+    }
+
+    public static ForeachExpression foreach(VarExpression var, IExpression expr, IExpression body)
+    {
+        return new ForeachExpression(var, expr, body);
+    }
+
+    public static WhileExpression While(IExpression cond, IExpression body)
+    {
+        return new WhileExpression(cond, body);
+    }
+
+    public static ConditionalExpression conditional(IExpression cond, IExpression truePart, IExpression falsePart)
+    {
+        return new ConditionalExpression(cond, truePart, falsePart);
+    }
+
     enum Type
     {
-        Binary, Value, Unary, New, Parens, FieldSelect, MethodCall,
-        Reference, Block, Assign, Var, ArrayAccess, If, LocalReference,
-        Return,
+        Binary("binary"), Value("value"), Unary("unary"), New("New"),
+        Parens("parens"), FieldSelect("fieldSelect"), MethodCall("methodCall"),
+        Reference("reference"), Block("block"), Assign("assign"), Var("var"),
+        ArrayAccess("arrayAccess"), If("If"), LocalReference("localReference"),
+        Return("Return"), Break("Break"), Continue("Continue"), Switch("Switch"),
+        Case("Case"), Foreach("foreach"), While("While"),Conditional("conditional"),
         ;
+
+        private final String methodName;
+
+        Type(String methodName)
+        {
+            this.methodName = methodName;
+        }
+
+        public String getMethodName()
+        {
+            return methodName;
+        }
     }
 }

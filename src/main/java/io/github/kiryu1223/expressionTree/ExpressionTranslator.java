@@ -1,5 +1,6 @@
 package io.github.kiryu1223.expressionTree;
 
+import com.sun.source.tree.Tree;
 import com.sun.source.tree.VariableTree;
 import com.sun.tools.javac.code.TypeTag;
 import com.sun.tools.javac.tree.JCTree;
@@ -129,7 +130,7 @@ public class ExpressionTranslator extends TreeTranslator
     {
         for (JCTree.JCExpression argument : arguments)
         {
-            if (argument instanceof JCTree.JCLambda)
+            if (argument.getKind() == Tree.Kind.LAMBDA_EXPRESSION)
             {
                 return true;
             }
@@ -286,7 +287,7 @@ public class ExpressionTranslator extends TreeTranslator
         LambdaParam.clear();
         for (VariableTree parameter : lambda.getParameters())
         {
-            JCTree.JCVariableDecl variableDecl= (JCTree.JCVariableDecl) parameter;
+            JCTree.JCVariableDecl variableDecl = (JCTree.JCVariableDecl) parameter;
             LambdaParam.add(variableDecl.getName().toString());
         }
         JCTree.JCExpression r = doStart(lambda.getBody());
@@ -371,7 +372,7 @@ public class ExpressionTranslator extends TreeTranslator
                 }
             }
             //再看看远处的理塘吧家人们
-            String[] spe=id.split("\\.");
+            String[] spe = id.split("\\.");
             String fullName = currentClassInfo.getPackageName() + "." + spe[0];
             for (ClassInfo classInfo : classInfos)
             {
@@ -575,6 +576,86 @@ public class ExpressionTranslator extends TreeTranslator
                     List.nil(),
                     expressionMap.get(IExpression.Type.Return),
                     List.of(expression)
+            );
+        }
+        else if (tree instanceof JCTree.JCEnhancedForLoop)
+        {
+            JCTree.JCEnhancedForLoop foreach = (JCTree.JCEnhancedForLoop) tree;
+            JCTree.JCExpression var = doStart(foreach.getVariable());
+            JCTree.JCExpression expr = doStart(foreach.getExpression());
+            JCTree.JCExpression body = doStart(foreach.getStatement());
+            return treeMaker.App(
+                    expressionMap.get(IExpression.Type.Foreach),
+                    List.of(var,expr,body)
+            );
+        }
+        else if (tree instanceof JCTree.JCForLoop)
+        {
+            // TODO
+        }
+        else if (tree instanceof JCTree.JCWhileLoop)
+        {
+            JCTree.JCWhileLoop whileLoop = (JCTree.JCWhileLoop) tree;
+            JCTree.JCExpression cond = doStart(whileLoop.getCondition());
+            JCTree.JCExpression expr = doStart(whileLoop.getStatement());
+            return treeMaker.App(
+                    expressionMap.get(IExpression.Type.While),
+                    List.of(cond,expr)
+            );
+        }
+        else if (tree instanceof JCTree.JCSwitch)
+        {
+            JCTree.JCSwitch aSwitch = (JCTree.JCSwitch) tree;
+            JCTree.JCExpression selector = doStart(aSwitch.getExpression());
+            ListBuffer<JCTree.JCExpression> listBuffer = new ListBuffer<>();
+            listBuffer.add(selector);
+            for (JCTree.JCCase aCase : aSwitch.getCases())
+            {
+                listBuffer.add(doStart(aCase));
+            }
+            return treeMaker.App(
+                    expressionMap.get(IExpression.Type.Switch),
+                    listBuffer.toList()
+            );
+        }
+        else if (tree instanceof JCTree.JCCase)
+        {
+            JCTree.JCCase aCase = (JCTree.JCCase) tree;
+            JCTree.JCExpression part = doStart(aCase.getExpression());
+            ListBuffer<JCTree.JCExpression> listBuffer = new ListBuffer<>();
+            listBuffer.add(part);
+            for (JCTree.JCStatement statement : aCase.getStatements())
+            {
+                listBuffer.add(doStart(statement));
+            }
+            return treeMaker.App(
+                    expressionMap.get(IExpression.Type.Case),
+                    listBuffer.toList()
+            );
+        }
+        else if (tree instanceof JCTree.JCConditional)
+        {
+            JCTree.JCConditional conditional = (JCTree.JCConditional) tree;
+            JCTree.JCExpression If = doStart(conditional.getCondition());
+            JCTree.JCExpression truePart = doStart(conditional.getTrueExpression());
+            JCTree.JCExpression falsePart = doStart(conditional.getFalseExpression());
+            return treeMaker.App(
+                    expressionMap.get(IExpression.Type.Conditional),
+                    List.of(If, truePart, falsePart)
+            );
+        }
+        else if (tree instanceof JCTree.JCBreak)
+        {
+            return treeMaker.App(
+                    expressionMap.get(IExpression.Type.Break),
+                    List.nil()
+            );
+        }
+        else if (tree instanceof JCTree.JCContinue)
+        {
+            return treeMaker.App(
+                    expressionMap.get(IExpression.Type.Continue),
+                    List.nil()
             );
         }
         else

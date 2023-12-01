@@ -29,6 +29,8 @@ import java.lang.reflect.Modifier;
 import java.lang.reflect.Parameter;
 import java.util.*;
 
+import static io.github.kiryu1223.expressionTree.expressionV2.IExpression.Type.*;
+
 public abstract class AbstractExpressionProcessor extends AbstractProcessor
 {
     private JavacTrees javacTrees;
@@ -183,21 +185,28 @@ public abstract class AbstractExpressionProcessor extends AbstractProcessor
         opMap.put(JCTree.Tag.MOD, treeMaker.Select(operator, names.fromString("MOD")));
 
         JCTree.JCFieldAccess iExpression = treeMaker.Select(treeMaker.Ident(names.fromString(expV2)), names.fromString("IExpression"));
-        expressionMap.put(IExpression.Type.Binary, treeMaker.Select(iExpression, names.fromString("binary")));
-        expressionMap.put(IExpression.Type.Value, treeMaker.Select(iExpression, names.fromString("value")));
-        expressionMap.put(IExpression.Type.Unary, treeMaker.Select(iExpression, names.fromString("unary")));
-        expressionMap.put(IExpression.Type.New, treeMaker.Select(iExpression, names.fromString("New")));
-        expressionMap.put(IExpression.Type.Parens, treeMaker.Select(iExpression, names.fromString("parens")));
-        expressionMap.put(IExpression.Type.FieldSelect, treeMaker.Select(iExpression, names.fromString("fieldSelect")));
-        expressionMap.put(IExpression.Type.MethodCall, treeMaker.Select(iExpression, names.fromString("methodCall")));
-        expressionMap.put(IExpression.Type.Reference, treeMaker.Select(iExpression, names.fromString("reference")));
-        expressionMap.put(IExpression.Type.Block, treeMaker.Select(iExpression, names.fromString("block")));
-        expressionMap.put(IExpression.Type.Assign, treeMaker.Select(iExpression, names.fromString("assign")));
-        expressionMap.put(IExpression.Type.Var, treeMaker.Select(iExpression, names.fromString("var")));
-        expressionMap.put(IExpression.Type.ArrayAccess, treeMaker.Select(iExpression, names.fromString("arrayAccess")));
-        expressionMap.put(IExpression.Type.If, treeMaker.Select(iExpression, names.fromString("If")));
-        expressionMap.put(IExpression.Type.LocalReference, treeMaker.Select(iExpression, names.fromString("localReference")));
-        expressionMap.put(IExpression.Type.Return, treeMaker.Select(iExpression, names.fromString("Return")));
+        expressionMap.put(Binary, treeMaker.Select(iExpression, names.fromString(Binary.getMethodName())));
+        expressionMap.put(Value, treeMaker.Select(iExpression, names.fromString(Value.getMethodName())));
+        expressionMap.put(Unary, treeMaker.Select(iExpression, names.fromString(Unary.getMethodName())));
+        expressionMap.put(New, treeMaker.Select(iExpression, names.fromString(New.getMethodName())));
+        expressionMap.put(Parens, treeMaker.Select(iExpression, names.fromString(Parens.getMethodName())));
+        expressionMap.put(FieldSelect, treeMaker.Select(iExpression, names.fromString(FieldSelect.getMethodName())));
+        expressionMap.put(MethodCall, treeMaker.Select(iExpression, names.fromString(MethodCall.getMethodName())));
+        expressionMap.put(Reference, treeMaker.Select(iExpression, names.fromString(Reference.getMethodName())));
+        expressionMap.put(Block, treeMaker.Select(iExpression, names.fromString(Block.getMethodName())));
+        expressionMap.put(Assign, treeMaker.Select(iExpression, names.fromString(Assign.getMethodName())));
+        expressionMap.put(Var, treeMaker.Select(iExpression, names.fromString(Var.getMethodName())));
+        expressionMap.put(ArrayAccess, treeMaker.Select(iExpression, names.fromString(ArrayAccess.getMethodName())));
+        expressionMap.put(If, treeMaker.Select(iExpression, names.fromString(If.getMethodName())));
+        expressionMap.put(LocalReference, treeMaker.Select(iExpression, names.fromString(LocalReference.getMethodName())));
+        expressionMap.put(Return, treeMaker.Select(iExpression, names.fromString(Return.getMethodName())));
+        expressionMap.put(Break, treeMaker.Select(iExpression, names.fromString(Break.getMethodName())));
+        expressionMap.put(Continue, treeMaker.Select(iExpression, names.fromString(Continue.getMethodName())));
+        expressionMap.put(Switch, treeMaker.Select(iExpression, names.fromString(Switch.getMethodName())));
+        expressionMap.put(Case, treeMaker.Select(iExpression, names.fromString(Case.getMethodName())));
+        expressionMap.put(Conditional, treeMaker.Select(iExpression, names.fromString(Conditional.getMethodName())));
+        expressionMap.put(Foreach, treeMaker.Select(iExpression, names.fromString(Foreach.getMethodName())));
+        expressionMap.put(While, treeMaker.Select(iExpression, names.fromString(While.getMethodName())));
     }
 
     @Override
