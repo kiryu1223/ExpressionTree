@@ -19,11 +19,16 @@ public class BlockExpression implements IExpression
     @Override
     public String toString()
     {
-        StringBuilder sb=new StringBuilder();
+        StringBuilder sb = new StringBuilder();
+        sb.append("{");
         for (IExpression expression : expressions)
         {
-            sb.append(expression.toString()).append("\n");
+            sb.append("    ")
+                    .append(expression)
+                    .append(";")
+                    .append("\n");
         }
+        sb.append("}");
         return sb.toString();
     }
 }

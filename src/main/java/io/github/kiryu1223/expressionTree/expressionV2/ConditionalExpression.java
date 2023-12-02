@@ -28,4 +28,10 @@ public class ConditionalExpression implements IExpression
     {
         return falsePart;
     }
+
+    @Override
+    public String toString()
+    {
+        return String.format("%s ? %s : %s", cond, truePart, falsePart);
+    }
 }

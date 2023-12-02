@@ -27,4 +27,10 @@ public class ForeachExpression implements IExpression
     {
         return body;
     }
+
+    @Override
+    public String toString()
+    {
+        return String.format("for(%s : %s)", var, expr) + "\n" + body;
+    }
 }

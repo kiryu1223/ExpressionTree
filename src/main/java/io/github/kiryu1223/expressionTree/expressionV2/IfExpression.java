@@ -27,4 +27,19 @@ public class IfExpression implements IExpression
     {
         return elSe;
     }
+
+    @Override
+    public String toString()
+    {
+        StringBuilder sb = new StringBuilder();
+        sb.append(String.format("if(%s)", cond))
+                .append("\n")
+                .append(body)
+                .append("\n");
+        if (elSe != null)
+        {
+            sb.append("else").append("\n").append(elSe);
+        }
+        return sb.toString();
+    }
 }

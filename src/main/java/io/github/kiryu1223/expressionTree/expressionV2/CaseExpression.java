@@ -22,4 +22,21 @@ public class CaseExpression implements IExpression
     {
         return stats;
     }
+
+    @Override
+    public String toString()
+    {
+        StringBuilder sb=new StringBuilder();
+        sb.append("case")
+                .append(" ")
+                .append(part)
+                .append(" ")
+                .append(":")
+                .append("\n");
+        for (IExpression stat : stats)
+        {
+            sb.append(stat).append("\n");
+        }
+        return sb.toString();
+    }
 }

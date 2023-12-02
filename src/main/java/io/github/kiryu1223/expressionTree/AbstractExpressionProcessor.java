@@ -8,6 +8,7 @@ import com.sun.tools.javac.processing.JavacProcessingEnvironment;
 import com.sun.tools.javac.tree.JCTree;
 import com.sun.tools.javac.tree.TreeMaker;
 import com.sun.tools.javac.util.Context;
+import com.sun.tools.javac.util.ListBuffer;
 import com.sun.tools.javac.util.Names;
 import io.github.kiryu1223.expressionTree.FunctionalInterface.IReturnBoolean;
 import io.github.kiryu1223.expressionTree.FunctionalInterface.IReturnGeneric;
@@ -43,6 +44,7 @@ public abstract class AbstractExpressionProcessor extends AbstractProcessor
     Types types;
     Elements elements;
     private final List<ClassInfo> classInfos = new ArrayList<>();
+
     @Override
     public Set<String> getSupportedAnnotationTypes()
     {
@@ -274,6 +276,7 @@ public abstract class AbstractExpressionProcessor extends AbstractProcessor
                             parameterStr = findFullName(parameterStr, currentClassInfo);
                             ParamInfo paramInfo = new ParamInfo(parameterStr);
                             com.sun.tools.javac.util.List<JCTree.JCAnnotation> annotationList = parameter.getModifiers().getAnnotations();
+                            //ListBuffer<JCTree.JCAnnotation> news = new ListBuffer<>();
                             for (JCTree.JCAnnotation annotation : annotationList)
                             {
                                 if (annotation.getAnnotationType() instanceof JCTree.JCIdent
@@ -300,7 +303,9 @@ public abstract class AbstractExpressionProcessor extends AbstractProcessor
                                     paramInfo.getAnnoInfo().add(new AnnoInfo(ExpressionAnno, cc));
                                     break;
                                 }
+                                //news.add(annotation);
                             }
+                            //parameter.getModifiers().annotations = news.toList();
                             methodInfo.getParamInfos().add(paramInfo);
                         }
                         currentClassInfo.getMethodInfos().add(methodInfo);
@@ -337,7 +342,7 @@ public abstract class AbstractExpressionProcessor extends AbstractProcessor
         return false;
     }
 
-    private String findFullName(String typeName,ClassInfo currentClassInfo)
+    private String findFullName(String typeName, ClassInfo currentClassInfo)
     {
         String[] typeSp = typeName.split("\\.");
         StringBuilder sb = new StringBuilder();

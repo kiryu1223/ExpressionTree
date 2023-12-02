@@ -658,6 +658,14 @@ public class ExpressionTranslator extends TreeTranslator
                     List.nil()
             );
         }
+        else if (tree instanceof JCTree.JCTry)
+        {
+            // TODO
+        }
+        else if (tree instanceof JCTree.JCCatch)
+        {
+            // TODO
+        }
         else
         {
             System.out.println(tree);
