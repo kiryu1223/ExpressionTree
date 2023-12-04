@@ -24,6 +24,7 @@ import javax.lang.model.element.ElementKind;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.util.Elements;
 import javax.lang.model.util.Types;
+import java.io.IOException;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
@@ -40,7 +41,6 @@ public abstract class AbstractExpressionProcessor extends AbstractProcessor
     private Names names;
     private final Map<IExpression.Type, JCTree.JCFieldAccess> expressionMap = new HashMap<>();
     private final Map<JCTree.Tag, JCTree.JCFieldAccess> opMap = new HashMap<>();
-    private final List<Class<?>> classList = new ArrayList<>();
     Types types;
     Elements elements;
     private final List<ClassInfo> classInfos = new ArrayList<>();
@@ -95,24 +95,12 @@ public abstract class AbstractExpressionProcessor extends AbstractProcessor
         return SourceVersion.RELEASE_8;
     }
 
-    public abstract void registerManager(List<Class<?>> classList);
-
     private void register()
     {
-        classList.add(IReturnVoid.class);
-
-        classList.add(IReturnBoolean.B1.class);
-        classList.add(IReturnBoolean.B2.class);
-        classList.add(IReturnBoolean.B3.class);
-        classList.add(IReturnBoolean.B4.class);
-
-        classList.add(IReturnGeneric.G1.class);
-        classList.add(IReturnGeneric.G2.class);
-        classList.add(IReturnGeneric.G3.class);
-        classList.add(IReturnGeneric.G4.class);
-
-        for (Class<?> clazz : classList)
+        JarHelper jarHelper = new JarHelper(this.getClass());
+        for (Class<?> clazz : jarHelper.getClasses())
         {
+            if(clazz.isAnonymousClass())continue;
             ClassInfo classInfo = new ClassInfo(clazz.getPackage().getName(), clazz.getCanonicalName());
             if (isFunctionInterFace(clazz))
             {
@@ -166,7 +154,6 @@ public abstract class AbstractExpressionProcessor extends AbstractProcessor
         names = Names.instance(context);
         types = processingEnv.getTypeUtils();
         elements = processingEnv.getElementUtils();
-        registerManager(classList);
         register();
         String expV2 = "io.github.kiryu1223.expressionTree.expressionV2";
 
@@ -276,7 +263,6 @@ public abstract class AbstractExpressionProcessor extends AbstractProcessor
                             parameterStr = findFullName(parameterStr, currentClassInfo);
                             ParamInfo paramInfo = new ParamInfo(parameterStr);
                             com.sun.tools.javac.util.List<JCTree.JCAnnotation> annotationList = parameter.getModifiers().getAnnotations();
-                            //ListBuffer<JCTree.JCAnnotation> news = new ListBuffer<>();
                             for (JCTree.JCAnnotation annotation : annotationList)
                             {
                                 if (annotation.getAnnotationType() instanceof JCTree.JCIdent
@@ -303,9 +289,7 @@ public abstract class AbstractExpressionProcessor extends AbstractProcessor
                                     paramInfo.getAnnoInfo().add(new AnnoInfo(ExpressionAnno, cc));
                                     break;
                                 }
-                                //news.add(annotation);
                             }
-                            //parameter.getModifiers().annotations = news.toList();
                             methodInfo.getParamInfos().add(paramInfo);
                         }
                         currentClassInfo.getMethodInfos().add(methodInfo);
