@@ -1,0 +1,37 @@
+package io.github.kiryu1223.expressionTree.expressions;
+
+public enum Kind
+{
+    Binary,
+    Unary,
+    Constant,
+    FieldSelect,
+    MethodCall,
+    Parameter,
+    New,
+    NewArray,
+    Block,
+    Lambda,
+    Variable,
+    Index,
+    Assign,
+    AssignOp,
+    StaticClass,
+    Reference,
+    Return,
+    Break,
+    Continue,
+    Conditional,
+    If,
+    Parens,
+    Foreach,
+    For,
+    While,
+    Switch,
+    Case,
+    Catch,
+    Try,
+    Throw,
+    TypeCast,
+    ;
+}
