@@ -60,3 +60,36 @@ jdk15后的版本(**不包括jdk15**)因为封装规则的修改，需要往项�
   表达式对象抽象基类，内置生成所有表达式对象的工厂方法以及访问者模式，
   每个实现类都实现了获取自身携带参数和自己的类型的方法
 
+### 简单的使用案例
+```java
+package org.example;
+
+import io.github.kiryu1223.expressionTree.delegate.Action1;
+import io.github.kiryu1223.expressionTree.expressions.ExprTree;
+
+public class Main
+{
+  public static void main(String[] args)
+  {
+    ExprTree<Action1<String>> exprTree = new ExprTree<>((s) ->
+    {
+        System.out.println(s);
+    });
+
+    System.out.println("lambda代码体为:"+exprTree.getTree());
+    System.out.println("执行lambda结果为:👇");
+    exprTree.getDelegate().invoke("hello world");
+    System.out.println("lambda返回类型为:"+exprTree.getTree().getReturnType());
+  }
+}
+```
+执行结果
+```text
+lambda代码体为:(s) -> {
+    System.out.println(s);
+}
+执行lambda结果为:👇
+hello world
+lambda返回类型为:void
+```
+
