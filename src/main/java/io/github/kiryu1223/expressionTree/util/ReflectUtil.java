@@ -22,6 +22,7 @@ public class ReflectUtil
             if (!fieldMap.containsKey(name))
             {
                 Field declaredField = clazz.getDeclaredField(name);
+                declaredField.setAccessible(true);
                 fieldMap.put(name, declaredField);
             }
             return fieldMap.get(name);
@@ -40,6 +41,7 @@ public class ReflectUtil
             if (!methodMap.containsKey(classes))
             {
                 Method declaredMethod = clazz.getDeclaredMethod(name, classes);
+                declaredMethod.setAccessible(true);
                 methodMap.put(classes, declaredMethod);
             }
             return methodMap.get(classes);
@@ -54,6 +56,7 @@ public class ReflectUtil
                 if (AllAssignableFrom(parameterTypes, classes))
                 {
                     Map<Class<?>[], Method> methodMap = getMethodMap(clazz, name);
+                    declaredMethod.setAccessible(true);
                     methodMap.put(classes, declaredMethod);
                     return declaredMethod;
                 }

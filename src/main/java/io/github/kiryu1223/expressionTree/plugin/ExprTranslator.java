@@ -72,17 +72,21 @@ public class ExprTranslator extends TreeScanner
             methodParameter.put(methodDeclParameter.getName().toString(), methodDeclParameter);
         }
         ListBuffer<JCTree.JCStatement> listBuffer = new ListBuffer<>();
-        for (JCTree.JCStatement statement : methodDecl.getBody().getStatements())
+        JCTree.JCBlock body = methodDecl.getBody();
+        if (body != null)
         {
-            if (statement instanceof JCTree.JCVariableDecl)
+            for (JCTree.JCStatement statement : body.getStatements())
             {
-                JCTree.JCVariableDecl jcVariableDecl = (JCTree.JCVariableDecl) statement;
-                methodParameter.put(jcVariableDecl.getName().toString(), jcVariableDecl);
+                if (statement instanceof JCTree.JCVariableDecl)
+                {
+                    JCTree.JCVariableDecl jcVariableDecl = (JCTree.JCVariableDecl) statement;
+                    methodParameter.put(jcVariableDecl.getName().toString(), jcVariableDecl);
+                }
+                statement.accept(new NewExprTranslator(listBuffer, methodParameter));
+                listBuffer.append(statement);
             }
-            statement.accept(new NewExprTranslator(listBuffer, methodParameter));
-            listBuffer.append(statement);
+            methodDecl.body.stats = listBuffer.toList();
         }
-        methodDecl.body.stats = listBuffer.toList();
         super.visitMethodDef(methodDecl);
     }
 

@@ -28,7 +28,7 @@ jdk15后的版本(**不包括jdk15**)因为封装规则的修改，需要往项�
 <dependency>
   <groupId>io.github.kiryu1223</groupId>
   <artifactId>ExpressionTree</artifactId>
-  <version>1.1.0</version>
+  <version>1.1.1</version>
 </dependency>
 ```
 
