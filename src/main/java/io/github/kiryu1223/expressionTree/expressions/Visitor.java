@@ -4,16 +4,8 @@ import java.util.List;
 
 public abstract class Visitor
 {
-    private <T extends Expression> void deep(T expr)
-    {
-        if (expr != null) expr.accept(this);
-    }
-    private <T extends Expression> void deep(List<T> expr)
-    {
-        if (expr != null) for (T t : expr) t.accept(this);
-    }
-    public void visit(Expression expression)
-    {
+    public void visit(Expression expression) {
+        if (expression == null) return;
         switch (expression.getKind())
         {
             case Binary:
@@ -111,35 +103,66 @@ public abstract class Visitor
                 break;
         }
     }
+
     public void visit(BinaryExpression binaryExpression) {}
+
     public void visit(UnaryExpression unaryExpression) {}
+
     public void visit(ConstantExpression constantExpression) {}
+
     public void visit(FieldSelectExpression fieldSelectExpression) {}
+
     public void visit(MethodCallExpression methodCallExpression) {}
+
     public void visit(ParameterExpression parameterExpression) {}
+
     public void visit(NewExpression newExpression) {}
+
     public void visit(BlockExpression blockExpression) {}
+
     public void visit(LambdaExpression lambdaExpression) {}
+
     public void visit(VariableExpression variableExpression) {}
+
     public void visit(NewArrayExpression newArrayExpression) {}
+
     public void visit(IndexExpression indexExpression) {}
+
     public void visit(AssignExpression assignExpression) {}
+
     public void visit(AssignOpExpression assignOpExpression) {}
+
     public void visit(ReferenceExpression referenceExpression) {}
+
     public void visit(StaticClassExpression staticClassExpression) {}
+
     public void visit(ReturnExpression returnExpression) {}
+
     public void visit(BreakExpression breakExpression) {}
+
     public void visit(ContinueExpression continueExpression) {}
+
     public void visit(ConditionalExpression conditionalExpression) {}
+
     public void visit(IfExpression ifExpression) {}
+
     public void visit(ParensExpression parensExpression) {}
+
     public void visit(ForeachExpression foreachExpression) {}
+
     public void visit(ForExpression forExpression) {}
+
     public void visit(WhileExpression whileExpression) {}
+
     public void visit(SwitchExpression switchExpression) {}
+
     public void visit(CaseExpression caseExpression) {}
+
     public void visit(CatchExpression catchExpression) {}
+
     public void visit(TryExpression tryExpression) {}
+
     public void visit(ThrowExpression throwExpression) {}
+
     public void visit(TypeCastExpression typeCastExpression) {}
 }

@@ -33,4 +33,13 @@ public class WhileExpression extends Expression
     {
         return "while " + condition + body;
     }
+
+    @Override
+    public boolean equals(Object obj)
+    {
+        if (this == obj) return true;
+        if (obj == null || getClass() != obj.getClass()) return false;
+        WhileExpression that = (WhileExpression) obj;
+        return condition.equals(that.condition) && body.equals(that.body);
+    }
 }

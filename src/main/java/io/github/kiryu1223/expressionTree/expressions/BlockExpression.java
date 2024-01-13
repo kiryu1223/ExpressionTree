@@ -58,4 +58,13 @@ public class BlockExpression extends Expression
         sb.append("}");
         return sb.toString();
     }
+
+    @Override
+    public boolean equals(Object obj)
+    {
+        if (this == obj) return true;
+        if (obj == null || getClass() != obj.getClass()) return false;
+        BlockExpression that = (BlockExpression) obj;
+        return expressions.equals(that.expressions) && variables.equals(that.variables);
+    }
 }

@@ -39,4 +39,15 @@ public class ConditionalExpression extends Expression
     {
         return condition + " ? " + truePart + " : " + falsePart;
     }
+
+    @Override
+    public boolean equals(Object obj)
+    {
+        if (this == obj) return true;
+        if (obj == null || getClass() != obj.getClass()) return false;
+        ConditionalExpression that = (ConditionalExpression) obj;
+        return condition.equals(that.condition)
+                && truePart.equals(that.truePart)
+                && falsePart.equals(that.falsePart);
+    }
 }

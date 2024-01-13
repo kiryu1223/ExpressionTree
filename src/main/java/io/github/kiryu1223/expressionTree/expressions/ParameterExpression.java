@@ -32,4 +32,13 @@ public class ParameterExpression extends Expression
     {
         return name;
     }
+
+    @Override
+    public boolean equals(Object obj)
+    {
+        if (this == obj) return true;
+        if (obj == null || getClass() != obj.getClass()) return false;
+        ParameterExpression that = (ParameterExpression) obj;
+        return type.equals(that.type) && name.equals(that.name);
+    }
 }

@@ -34,4 +34,13 @@ public class FieldSelectExpression extends Expression
     {
         return expr + "." + field.getName();
     }
+
+    @Override
+    public boolean equals(Object obj)
+    {
+        if (this == obj) return true;
+        if (obj == null || getClass() != obj.getClass()) return false;
+        FieldSelectExpression that = (FieldSelectExpression) obj;
+        return expr.equals(that.expr) && field.equals(that.field);
+    }
 }

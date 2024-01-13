@@ -7,11 +7,13 @@ import com.sun.source.tree.Tree;
 import com.sun.source.util.TaskEvent;
 import com.sun.source.util.TaskListener;
 import com.sun.tools.javac.code.Type;
+import com.sun.tools.javac.code.TypeTag;
 import com.sun.tools.javac.code.Types;
 import com.sun.tools.javac.tree.JCTree;
 import com.sun.tools.javac.tree.TreeMaker;
 import com.sun.tools.javac.tree.TreeScanner;
 import com.sun.tools.javac.util.Context;
+import com.sun.tools.javac.util.ListBuffer;
 import com.sun.tools.javac.util.Names;
 import io.github.kiryu1223.expressionTree.expressions.Expression;
 import io.github.kiryu1223.expressionTree.expressions.Kind;
@@ -30,7 +32,8 @@ public class ExprTreeTaskListener implements TaskListener
     private final Names names;
     private final Map<Kind, JCTree.JCFieldAccess> methods = new HashMap<>();
     private final Map<JCTree.Tag, JCTree.JCFieldAccess> operators = new HashMap<>();
-    private final Map<JCTree.JCFieldAccess, JCTree> needToChangeClasses = new HashMap<>();
+    private final Map<String,Map<JCTree.JCFieldAccess, JCTree>> needToChangeClasses = new HashMap<>();
+    private final Map<String,List<JCTree.JCMethodInvocation>> needToChangeRef = new HashMap<>();
 
     public ExprTreeTaskListener(Context context)
     {
@@ -147,6 +150,9 @@ public class ExprTreeTaskListener implements TaskListener
     private void codeReplace(TaskEvent event)
     {
         if (event.getKind() != TaskEvent.Kind.PARSE) return;
+        String filename = event.getSourceFile().getName();
+        needToChangeClasses.put(filename,new HashMap<>());
+
         CompilationUnitTree compUnit = event.getCompilationUnit();
         List<ImportInfo> imports = new ArrayList<>(compUnit.getImports().size());
         for (ImportTree anImport : compUnit.getImports())
@@ -164,58 +170,90 @@ public class ExprTreeTaskListener implements TaskListener
                 JCTree.JCVariableDecl field = (JCTree.JCVariableDecl) member;
                 classFields.put(field.getName().toString(), field);
             }
-            classDecl.accept(new ExprTranslator(
+            ExprTranslator exprTranslator = new ExprTranslator(
                     imports,
                     treeMaker,
                     types, names,
-                    classFields, needToChangeClasses, methods,
+                    classFields, needToChangeClasses.get(filename), methods,
                     operators
-            ));
+            );
+            classDecl.accept(exprTranslator);
+            needToChangeRef.put(filename,exprTranslator.getNeedToChangeRef());
         }
     }
 
     private void typeReplace(TaskEvent event)
     {
         if (event.getKind() != TaskEvent.Kind.ANALYZE) return;
-        if (needToChangeClasses.isEmpty()) return;
-        needToChangeClasses.forEach((k, v) ->
+        String filename = event.getSourceFile().getName();
+        if (needToChangeClasses.containsKey(filename))
         {
-            AtomicReference<Type> type = new AtomicReference<>();
-            if (isAnonymousClass(v))
+            Map<JCTree.JCFieldAccess, JCTree> FieldMap = needToChangeClasses.get(filename);
+            FieldMap.forEach((k, v) ->
             {
-                JCTree.JCClassDecl classDecl = (JCTree.JCClassDecl) v;
-                type.set(classDecl.getExtendsClause().type);
-            }
-            else if (v.getKind() == Tree.Kind.LAMBDA_EXPRESSION)
-            {
-                JCTree.JCLambda lambda = (JCTree.JCLambda) v;
-                if (lambda.getBodyKind() == LambdaExpressionTree.BodyKind.EXPRESSION)
+                AtomicReference<Type> type = new AtomicReference<>();
+                if (isAnonymousClass(v))
                 {
-                    type.set(lambda.getBody().type);
+                    JCTree.JCClassDecl classDecl = (JCTree.JCClassDecl) v;
+                    type.set(classDecl.getExtendsClause().type);
+                }
+                else if (v.getKind() == Tree.Kind.LAMBDA_EXPRESSION)
+                {
+                    JCTree.JCLambda lambda = (JCTree.JCLambda) v;
+                    if (lambda.getBodyKind() == LambdaExpressionTree.BodyKind.EXPRESSION)
+                    {
+                        if (lambda.getBody() instanceof JCTree.JCNewClass&&isAnonymousClass(((JCTree.JCNewClass) lambda.getBody()).getClassBody()))
+                        {
+                            JCTree.JCNewClass body = (JCTree.JCNewClass) lambda.getBody();
+                            type.set(body.getIdentifier().type);
+                        }
+                        else
+                        {
+                            type.set(lambda.getBody().type);
+                        }
+                    }
+                    else
+                    {
+                        lambda.getBody().accept(new TreeScanner()
+                        {
+                            @Override
+                            public void visitReturn(JCTree.JCReturn jcReturn)
+                            {
+                                type.set(jcReturn.getExpression().type);
+                                super.visitReturn(jcReturn);
+                            }
+                        });
+                    }
                 }
                 else
                 {
-                    lambda.getBody().accept(new TreeScanner()
-                    {
-                        @Override
-                        public void visitReturn(JCTree.JCReturn jcReturn)
-                        {
-                            type.set(jcReturn.getExpression().type);
-                            super.visitReturn(jcReturn);
-                        }
-                    });
+                    type.set(v.type);
+                }
+                if (type.get() != null)
+                {
+                    k.selected.setType(type.get());
+                }
+            });
+            FieldMap.clear();
+        }
+        if (needToChangeRef.containsKey(filename))
+        {
+            List<JCTree.JCMethodInvocation> methodInvocations = needToChangeRef.get(filename);
+            for (JCTree.JCMethodInvocation methodInvocation : methodInvocations)
+            {
+                com.sun.tools.javac.util.List<JCTree.JCExpression> arguments = methodInvocation.getArguments();
+                JCTree.JCIdent ident = (JCTree.JCIdent) arguments.get(0);
+                if (ident.type.isPrimitive())
+                {
+                    ListBuffer<JCTree.JCExpression> args=new ListBuffer<>();
+                    args.append(arguments.get(0));
+                    args.append(arguments.get(1));
+                    args.append(treeMaker.Literal(true));
+                    methodInvocation.args=args.toList();
                 }
             }
-            else
-            {
-                type.set(v.type);
-            }
-            if (type.get() != null)
-            {
-                k.selected.setType(type.get());
-            }
-        });
-        needToChangeClasses.clear();
+            methodInvocations.clear();
+        }
     }
 
     private boolean isAnonymousClass(JCTree tree)

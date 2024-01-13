@@ -71,4 +71,14 @@ public class TryExpression extends Expression
         }
         return sb.toString();
     }
+
+    @Override
+    public boolean equals(Object obj)
+    {
+        if (this == obj) return true;
+        if (obj == null || getClass() != obj.getClass()) return false;
+        TryExpression that = (TryExpression) obj;
+        return body.equals(that.body)&&catchers.equals(that.catchers)
+                &&finalizer.equals(that.finalizer)&&resources.equals(that.resources);
+    }
 }

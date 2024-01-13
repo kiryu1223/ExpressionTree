@@ -56,4 +56,14 @@ public class NewExpression extends Expression
         }
         return sb.toString();
     }
+
+    @Override
+    public boolean equals(Object obj)
+    {
+        if (this == obj) return true;
+        if (obj == null || getClass() != obj.getClass()) return false;
+        NewExpression that = (NewExpression) obj;
+        return type.equals(that.type) && constructorArgs.equals(that.constructorArgs)
+                && classBody.equals(that.classBody);
+    }
 }

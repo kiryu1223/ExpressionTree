@@ -11,7 +11,19 @@ public abstract class Expression
 
     public abstract String toString();
 
+    public abstract boolean equals(Object obj);
+
     public void accept(Visitor visitor)
+    {
+        visitor.visit(this);
+    }
+
+    public <V> void accept(GenericsVisitor<V> visitor, V v)
+    {
+        visitor.visit(this, v);
+    }
+
+    public void accept(DeepFindVisitor visitor)
     {
         visitor.visit(this);
     }
@@ -45,15 +57,9 @@ public abstract class Expression
     {
         return new ParameterExpression(type, name);
     }
-
     public static NewExpression New(Class<?> type, Expression[] constructorArgs, BlockExpression body)
     {
         return new NewExpression(type, Arrays.asList(constructorArgs), body);
-    }
-
-    public static NewExpression New(Class<?> type, Expression[] constructorArgs)
-    {
-        return new NewExpression(type, Arrays.asList(constructorArgs), null);
     }
 
     public static LambdaExpression Lambda(Expression body, ParameterExpression[] parameters, Class<?> returnType)
@@ -108,7 +114,12 @@ public abstract class Expression
 
     public static ReferenceExpression Reference(Object ref, String name)
     {
-        return new ReferenceExpression(ref, name);
+        return new ReferenceExpression(ref, name, false);
+    }
+
+    public static ReferenceExpression Reference(Object ref, String name, boolean isPrimitive)
+    {
+        return new ReferenceExpression(ref, name, isPrimitive);
     }
 
     public static ReturnExpression Return(Expression expr)

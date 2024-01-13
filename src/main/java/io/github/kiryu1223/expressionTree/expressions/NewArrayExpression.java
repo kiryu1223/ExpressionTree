@@ -67,4 +67,14 @@ public class NewArrayExpression extends Expression
         }
         return sb.toString();
     }
+
+    @Override
+    public boolean equals(Object obj)
+    {
+        if (this == obj) return true;
+        if (obj == null || getClass() != obj.getClass()) return false;
+        NewArrayExpression that = (NewArrayExpression) obj;
+        return type.equals(that.type) && counts.equals(that.counts)
+                && elems.equals(that.elems);
+    }
 }

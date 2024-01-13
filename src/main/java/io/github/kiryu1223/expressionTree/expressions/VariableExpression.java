@@ -49,4 +49,13 @@ public class VariableExpression extends Expression
         }
         return sb.toString();
     }
+
+    @Override
+    public boolean equals(Object obj)
+    {
+        if (this == obj) return true;
+        if (obj == null || getClass() != obj.getClass()) return false;
+        VariableExpression that = (VariableExpression) obj;
+        return parameter.equals(that.parameter) && init.equals(that.init);
+    }
 }

@@ -13,4 +13,11 @@ public class BreakExpression extends Expression
     {
         return "break";
     }
+
+    @Override
+    public boolean equals(Object obj)
+    {
+        if (this == obj) return true;
+        return obj != null && getClass() == obj.getClass();
+    }
 }

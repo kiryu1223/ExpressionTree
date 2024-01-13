@@ -32,4 +32,13 @@ public class CatchExpression extends Expression
     {
         return "catch (" + param + ")" + body;
     }
+
+    @Override
+    public boolean equals(Object obj)
+    {
+        if (this == obj) return true;
+        if (obj == null || getClass() != obj.getClass()) return false;
+        CatchExpression that = (CatchExpression) obj;
+        return param.equals(that.param) && body.equals(that.body);
+    }
 }

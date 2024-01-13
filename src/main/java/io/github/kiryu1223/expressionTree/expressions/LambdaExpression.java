@@ -1,5 +1,8 @@
 package io.github.kiryu1223.expressionTree.expressions;
 
+import io.github.kiryu1223.expressionTree.dynamic.DynamicCompilerUtil;
+import io.github.kiryu1223.expressionTree.dynamic.DynamicMethod;
+
 import java.util.List;
 
 public class LambdaExpression extends Expression
@@ -52,5 +55,20 @@ public class LambdaExpression extends Expression
         sb.append(") -> ");
         sb.append(body);
         return sb.toString();
+    }
+
+    @Override
+    public boolean equals(Object obj)
+    {
+        if (this == obj) return true;
+        if (obj == null || getClass() != obj.getClass()) return false;
+        LambdaExpression that = (LambdaExpression) obj;
+        return body.equals(that.body) && parameters.equals(that.parameters)
+                && returnType.equals(that.returnType);
+    }
+
+    public DynamicMethod compile()
+    {
+        return DynamicCompilerUtil.dynamicCompile(this);
     }
 }

@@ -44,4 +44,20 @@ public class ConstantExpression extends Expression
         }
     }
 
+    @Override
+    public boolean equals(Object obj)
+    {
+        if (this == obj) return true;
+        if (obj == null || getClass() != obj.getClass()) return false;
+        ConstantExpression that = (ConstantExpression) obj;
+        if (that.value == null && type == Void.class)
+        {
+            return true;
+        }
+        else
+        {
+            return value.equals(that.value);
+        }
+    }
+
 }

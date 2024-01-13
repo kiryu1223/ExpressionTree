@@ -32,4 +32,13 @@ public class IndexExpression extends Expression
     {
         return object + "[" + index + "]";
     }
+
+    @Override
+    public boolean equals(Object obj)
+    {
+        if (this == obj) return true;
+        if (obj == null || getClass() != obj.getClass()) return false;
+        IndexExpression that = (IndexExpression) obj;
+        return object.equals(that.object) && index.equals(that.index);
+    }
 }

@@ -25,4 +25,13 @@ public class ParensExpression extends Expression
     {
         return "(" + expr + ")";
     }
+
+    @Override
+    public boolean equals(Object obj)
+    {
+        if (this == obj) return true;
+        if (obj == null || getClass() != obj.getClass()) return false;
+        ParensExpression that = (ParensExpression) obj;
+        return expr.equals(that.expr);
+    }
 }

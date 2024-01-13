@@ -25,4 +25,13 @@ public class ThrowExpression extends Expression
     {
         return "throw " + expr;
     }
+
+    @Override
+    public boolean equals(Object obj)
+    {
+        if (this == obj) return true;
+        if (obj == null || getClass() != obj.getClass()) return false;
+        ThrowExpression that = (ThrowExpression) obj;
+        return expr.equals(that.expr);
+    }
 }

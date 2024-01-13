@@ -32,4 +32,13 @@ public class TypeCastExpression extends Expression
     {
         return "(" + targetType.getSimpleName() + ")" + expr;
     }
+
+    @Override
+    public boolean equals(Object obj)
+    {
+        if (this == obj) return true;
+        if (obj == null || getClass() != obj.getClass()) return false;
+        TypeCastExpression that = (TypeCastExpression) obj;
+        return targetType.equals(that.targetType) && expr.equals(that.expr);
+    }
 }

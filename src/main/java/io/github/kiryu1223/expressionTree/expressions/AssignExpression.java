@@ -1,5 +1,7 @@
 package io.github.kiryu1223.expressionTree.expressions;
 
+import java.util.Objects;
+
 public class AssignExpression extends Expression
 {
     private final Expression left;
@@ -31,5 +33,14 @@ public class AssignExpression extends Expression
     public String toString()
     {
         return left + " = " + right;
+    }
+
+    @Override
+    public boolean equals(Object obj)
+    {
+        if (this == obj) return true;
+        if (obj == null || getClass() != obj.getClass()) return false;
+        AssignExpression that = (AssignExpression) obj;
+        return left.equals(that.left) && right.equals(that.right);
     }
 }

@@ -39,4 +39,13 @@ public class AssignOpExpression extends Expression
     {
         return left + " " + operatorType.getOperator() + " " + right;
     }
+
+    @Override
+    public boolean equals(Object obj)
+    {
+        if (this == obj) return true;
+        if (obj == null || getClass() != obj.getClass()) return false;
+        AssignOpExpression that = (AssignOpExpression) obj;
+        return left.equals(that.left) && right.equals(that.right) && operatorType.equals(that.operatorType);
+    }
 }

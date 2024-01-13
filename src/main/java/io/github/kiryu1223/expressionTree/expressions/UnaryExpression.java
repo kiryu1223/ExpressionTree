@@ -39,4 +39,13 @@ public class UnaryExpression extends Expression
                 return operatorType.getOperator() + operand;
         }
     }
+
+    @Override
+    public boolean equals(Object obj)
+    {
+        if (this == obj) return true;
+        if (obj == null || getClass() != obj.getClass()) return false;
+        UnaryExpression that = (UnaryExpression) obj;
+        return operand.equals(that.operand) && operatorType.equals(that.operatorType);
+    }
 }

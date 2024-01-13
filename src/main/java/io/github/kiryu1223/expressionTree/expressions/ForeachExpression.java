@@ -39,4 +39,13 @@ public class ForeachExpression extends Expression
     {
         return "for (" + var + " : " + expr + ")" + body;
     }
+
+    @Override
+    public boolean equals(Object obj)
+    {
+        if (this == obj) return true;
+        if (obj == null || getClass() != obj.getClass()) return false;
+        ForeachExpression that = (ForeachExpression) obj;
+        return var.equals(that.var) && expr.equals(that.expr) && body.equals(that.body);
+    }
 }

@@ -56,4 +56,13 @@ public class CaseExpression extends Expression
         }
         return sb.toString();
     }
+
+    @Override
+    public boolean equals(Object obj)
+    {
+        if (this == obj) return true;
+        if (obj == null || getClass() != obj.getClass()) return false;
+        CaseExpression that = (CaseExpression) obj;
+        return part.equals(that.part) && stats.equals(that.stats);
+    }
 }

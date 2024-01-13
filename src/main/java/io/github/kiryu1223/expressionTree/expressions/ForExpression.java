@@ -66,4 +66,14 @@ public class ForExpression extends Expression
         sb.append(") ").append(body);
         return sb.toString();
     }
+
+    @Override
+    public boolean equals(Object obj)
+    {
+        if (this == obj) return true;
+        if (obj == null || getClass() != obj.getClass()) return false;
+        ForExpression that = (ForExpression) obj;
+        return init.equals(that.init) && condition.equals(that.condition)
+                && step.equals(that.step) && body.equals(that.body);
+    }
 }

@@ -53,4 +53,24 @@ public class MethodCallExpression extends Expression
         sb.append(")");
         return sb.toString();
     }
+
+    @Override
+    public boolean equals(Object obj)
+    {
+        if (this == obj) return true;
+        if (obj == null || getClass() != obj.getClass()) return false;
+        MethodCallExpression that = (MethodCallExpression) obj;
+        return expr.equals(that.expr) && method.equals(that.method)
+                && args.equals(that.args);
+    }
+
+    public boolean inParameters(List<ParameterExpression> parameters)
+    {
+        if (expr instanceof ParameterExpression)
+        {
+            ParameterExpression parameter = (ParameterExpression) expr;
+            return parameters.contains(parameter);
+        }
+        return false;
+    }
 }

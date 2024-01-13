@@ -16,6 +16,7 @@ import io.github.kiryu1223.expressionTree.util.ReflectUtil;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Stack;
@@ -28,6 +29,7 @@ public class ExprTranslator extends TreeScanner
     private final Names names;
     private final Map<String, JCTree.JCVariableDecl> classFields;
     private final Map<JCTree.JCFieldAccess, JCTree> needToChangeClasses;
+    private final java.util.List<JCTree.JCMethodInvocation> needToChangeRef = new ArrayList<>();
     private final Map<Kind, JCTree.JCFieldAccess> methods;
     private final Map<JCTree.Tag, JCTree.JCFieldAccess> operators;
     private int index = 0;
@@ -90,6 +92,11 @@ public class ExprTranslator extends TreeScanner
         super.visitMethodDef(methodDecl);
     }
 
+    public java.util.List<JCTree.JCMethodInvocation> getNeedToChangeRef()
+    {
+        return needToChangeRef;
+    }
+
     private class NewExprTranslator extends TreeScanner
     {
         private final ListBuffer<JCTree.JCStatement> statementList;
@@ -104,17 +111,29 @@ public class ExprTranslator extends TreeScanner
             this.methodParameter = methodParameter;
         }
 
-        private boolean isExprTree(JCTree.JCNewClass newClass)
+        private boolean isExprTree(JCTree tree)
         {
-            if (!(newClass.getIdentifier() instanceof JCTree.JCTypeApply)) return false;
-            JCTree.JCTypeApply typeApply = (JCTree.JCTypeApply) newClass.getIdentifier();
-            if (!typeApply.getType().toString().equals(ExprTree.class.getSimpleName())) return false;
-            List<JCTree.JCExpression> args = newClass.getArguments();
-            if (args.size() != 1 || args.get(0).getKind() != Tree.Kind.LAMBDA_EXPRESSION) return false;
-            for (ImportInfo anImport : imports)
+            if (tree instanceof JCTree.JCNewClass)
             {
-                if (anImport.getName().equals(exprName)
-                        || anImport.getName().equals(exprStar)) return true;
+                JCTree.JCNewClass newClass = (JCTree.JCNewClass) tree;
+                if (!(newClass.getIdentifier() instanceof JCTree.JCTypeApply)) return false;
+                JCTree.JCTypeApply typeApply = (JCTree.JCTypeApply) newClass.getIdentifier();
+                if (!typeApply.getType().toString().equals(ExprTree.class.getSimpleName())) return false;
+                List<JCTree.JCExpression> args = newClass.getArguments();
+                if (args.size() != 1 || args.get(0).getKind() != Tree.Kind.LAMBDA_EXPRESSION) return false;
+                for (ImportInfo anImport : imports)
+                {
+                    if (anImport.getName().equals(exprName)
+                            || anImport.getName().equals(exprStar)) return true;
+                }
+            }
+            else if (tree instanceof JCTree.JCMethodInvocation)
+            {
+                JCTree.JCMethodInvocation methodInvocation = (JCTree.JCMethodInvocation) tree;
+                List<JCTree.JCExpression> args = methodInvocation.getArguments();
+                if (args.size() != 1 || args.get(0).getKind() != Tree.Kind.LAMBDA_EXPRESSION) return false;
+                JCTree.JCExpression select = methodInvocation.getMethodSelect();
+                return hasExprStaticImport(select.toString());
             }
             return false;
         }
@@ -129,9 +148,24 @@ public class ExprTranslator extends TreeScanner
             return "blockVar_" + index++;
         }
 
-        private void transExprTree(JCTree.JCNewClass newClass)
+        private void transExprTree(JCTree tree)
         {
-            JCTree.JCLambda lambda = (JCTree.JCLambda) newClass.getArguments().get(0);
+            if (tree instanceof JCTree.JCNewClass)
+            {
+                JCTree.JCNewClass newClass = (JCTree.JCNewClass) tree;
+                ListBuffer<JCTree.JCExpression> args = lambdaToTree((JCTree.JCLambda) newClass.getArguments().get(0), newClass.getArguments());
+                newClass.args = args.toList();
+            }
+            else if (tree instanceof JCTree.JCMethodInvocation)
+            {
+                JCTree.JCMethodInvocation methodInvocation = (JCTree.JCMethodInvocation) tree;
+                ListBuffer<JCTree.JCExpression> args = lambdaToTree((JCTree.JCLambda) methodInvocation.getArguments().get(0), methodInvocation.getArguments());
+                methodInvocation.args = args.toList();
+            }
+        }
+
+        private ListBuffer<JCTree.JCExpression> lambdaToTree(JCTree.JCLambda lambda, List<JCTree.JCExpression> oldArgs)
+        {
             for (VariableTree variableTree : lambda.getParameters())
             {
                 JCTree.JCVariableDecl variableDecl = (JCTree.JCVariableDecl) variableTree;
@@ -172,9 +206,9 @@ public class ExprTranslator extends TreeScanner
             );
 
             ListBuffer<JCTree.JCExpression> args = new ListBuffer<>();
-            args.appendList(newClass.getArguments());
+            args.appendList(oldArgs);
             args.append(finalTree);
-            newClass.args = args.toList();
+            return args;
         }
 
         private JCTree.JCExpression deepVisit(JCTree tree)
@@ -208,14 +242,17 @@ public class ExprTranslator extends TreeScanner
                 else if (methodParameter.containsKey(name)
                         || classFields.containsKey(name))
                 {
-                    return treeMaker.Apply(
+                    JCTree.JCMethodInvocation apply = treeMaker.Apply(
                             null,
                             methods.get(Kind.Reference),
                             List.of(
                                     treeMaker.Ident(names.fromString(name)),
-                                    treeMaker.Literal(name)
+                                    treeMaker.Literal(name),
+                                    treeMaker.Literal(false)
                             )
                     );
+                    needToChangeRef.add(apply);
+                    return apply;
                 }
                 //检查是不是静态导入
                 for (ImportInfo anImport : imports)
@@ -225,14 +262,17 @@ public class ExprTranslator extends TreeScanner
                         String[] split = anImport.getName().split("\\.");
                         if (split[split.length - 1].equals(name))
                         {
-                            return treeMaker.Apply(
+                            JCTree.JCMethodInvocation apply = treeMaker.Apply(
                                     null,
                                     methods.get(Kind.Reference),
                                     List.of(
                                             treeMaker.Ident(names.fromString(name)),
-                                            treeMaker.Literal(name)
+                                            treeMaker.Literal(name),
+                                            treeMaker.Literal(false)
                                     )
                             );
+                            needToChangeRef.add(apply);
+                            return apply;
                         }
                     }
                 }
@@ -298,7 +338,7 @@ public class ExprTranslator extends TreeScanner
                                 )
                         )
                 );
-                JCTree.JCIdent methodParam = makeToMethodParam(Method.class, methodInit);
+                JCTree.JCIdent methodParam = makeToMethodParam(methodInit);
                 return treeMaker.Apply(
                         List.nil(),
                         methods.get(Kind.MethodCall),
@@ -352,7 +392,7 @@ public class ExprTranslator extends TreeScanner
                                 treeMaker.Literal(jcFieldAccess.getIdentifier().toString())
                         )
                 );
-                JCTree.JCIdent fieldParam = makeToFieldParam(Field.class, fieldInit);
+                JCTree.JCIdent fieldParam = makeToFieldParam(fieldInit);
                 return treeMaker.Apply(
                         List.nil(),
                         methods.get(Kind.FieldSelect),
@@ -468,9 +508,16 @@ public class ExprTranslator extends TreeScanner
                     JCTree.JCMethodInvocation body = treeMaker.Apply(
                             null,
                             methods.get(Kind.Block),
-                            List.of(makeArray(Expression.class, elems.toList()))
+                            List.of(
+                                    makeArray(Expression.class, elems.toList()),
+                                    makeArray(ParameterExpression.class, List.nil())
+                            )
                     );
                     mArgs.append(body);
+                }
+                else
+                {
+                    mArgs.append(treeMaker.Literal(TypeTag.BOT,null));
                 }
                 return treeMaker.Apply(
                         null,
@@ -483,8 +530,6 @@ public class ExprTranslator extends TreeScanner
                 JCTree.JCNewArray jcNewArray = (JCTree.JCNewArray) tree;
                 ListBuffer<JCTree.JCExpression> dims = new ListBuffer<>();
                 ListBuffer<JCTree.JCExpression> args = new ListBuffer<>();
-                System.out.println(jcNewArray.getDimensions().size());
-                System.out.println(jcNewArray.getInitializers().size());
                 for (JCTree.JCExpression dimension : jcNewArray.getDimensions())
                 {
                     dims.append(deepVisit(dimension));
@@ -768,6 +813,16 @@ public class ExprTranslator extends TreeScanner
             super.visitNewClass(newClass);
         }
 
+        @Override
+        public void visitApply(JCTree.JCMethodInvocation methodInvocation)
+        {
+            if (isExprTree(methodInvocation))
+            {
+                transExprTree(methodInvocation);
+            }
+            super.visitApply(methodInvocation);
+        }
+
         private JCTree.JCFieldAccess getClass(Class<?> type)
         {
             String path = type.getPackage().getName();
@@ -775,20 +830,59 @@ public class ExprTranslator extends TreeScanner
             return treeMaker.Select(treeMaker.Ident(names.fromString(path)), names.fromString(expr));
         }
 
-        private JCTree.JCIdent makeToMethodParam(Class<Method> type, JCTree.JCExpression init)
+        private JCTree.JCIdent makeToMethodParam(JCTree.JCExpression init)
         {
             Name param = names.fromString("reflectMethodParam_" + index++);
-            JCTree.JCVariableDecl arg = treeMaker.VarDef(treeMaker.Modifiers(0), param, getClass(type), init);
+            JCTree.JCVariableDecl arg = treeMaker.VarDef(treeMaker.Modifiers(0), param, getClass(Method.class), init);
             statementList.append(arg);
             return treeMaker.Ident(param);
         }
 
-        private JCTree.JCIdent makeToFieldParam(Class<Field> type, JCTree.JCExpression init)
+        private JCTree.JCIdent makeToFieldParam(JCTree.JCExpression init)
         {
             Name param = names.fromString("reflectFieldParam_" + index++);
-            JCTree.JCVariableDecl arg = treeMaker.VarDef(treeMaker.Modifiers(0), param, getClass(type), init);
+            JCTree.JCVariableDecl arg = treeMaker.VarDef(treeMaker.Modifiers(0), param, getClass(Field.class), init);
             statementList.append(arg);
             return treeMaker.Ident(param);
+        }
+
+        private boolean hasExprStaticImport(String name)
+        {
+            switch (name)
+            {
+                case "ExprTree":
+                    for (ImportInfo anImport : imports)
+                    {
+                        if (anImport.isStatic()
+                                && anImport.getName().equals(ExprTree.class.getCanonicalName() + ".ExprTree"))
+                        {
+                            return true;
+                        }
+                    }
+                    break;
+                case "Expr":
+                    for (ImportInfo anImport : imports)
+                    {
+                        if (anImport.isStatic()
+                                && anImport.getName().equals(ExprTree.class.getCanonicalName() + ".Expr"))
+                        {
+                            return true;
+                        }
+                    }
+                case "ExprTree.ExprTree":
+                case "ExprTree.Expr":
+                    for (ImportInfo anImport : imports)
+                    {
+                        if (anImport.getName().equals(exprName)
+                                || anImport.getName().equals(exprStar))
+                        {
+
+                            return true;
+                        }
+                    }
+                    break;
+            }
+            return false;
         }
     }
 }

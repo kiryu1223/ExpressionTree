@@ -25,4 +25,13 @@ public class StaticClassExpression extends Expression
     {
         return type.getSimpleName();
     }
+
+    @Override
+    public boolean equals(Object obj)
+    {
+        if (this == obj) return true;
+        if (obj == null || getClass() != obj.getClass()) return false;
+        StaticClassExpression that = (StaticClassExpression) obj;
+        return type.equals(that.type);
+    }
 }

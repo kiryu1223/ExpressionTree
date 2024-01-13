@@ -51,4 +51,14 @@ public class IfExpression extends Expression
         }
         return sb.toString();
     }
+
+    @Override
+    public boolean equals(Object obj)
+    {
+        if (this == obj) return true;
+        if (obj == null || getClass() != obj.getClass()) return false;
+        IfExpression that = (IfExpression) obj;
+        return condition.equals(that.condition) && thenPart.equals(that.thenPart)
+                && elsePart.equals(that.elsePart);
+    }
 }
