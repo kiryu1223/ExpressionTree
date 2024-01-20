@@ -1,6 +1,10 @@
 package io.github.kiryu1223.expressionTree.expressions;
 
+import io.github.kiryu1223.expressionTree.delegate.Action0;
+import io.github.kiryu1223.expressionTree.delegate.Action1;
 import io.github.kiryu1223.expressionTree.delegate.Delegate;
+
+import java.util.function.Function;
 
 public final class ExprTree<T extends Delegate>
 {

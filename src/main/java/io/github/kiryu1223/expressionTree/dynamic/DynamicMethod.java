@@ -1,19 +1,19 @@
 package io.github.kiryu1223.expressionTree.dynamic;
 
+import java.lang.invoke.MethodHandle;
 import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
 public class DynamicMethod
 {
-    private final Method method;
+    private final MethodHandle methodHandle;
     private final List<Object> defValues;
 
-    public DynamicMethod(Method method, List<Object> defValues)
+    public DynamicMethod(MethodHandle methodHandle, List<Object> defValues)
     {
-        this.method = method;
+        this.methodHandle = methodHandle;
         this.defValues = defValues;
     }
 
@@ -21,20 +21,49 @@ public class DynamicMethod
     {
         try
         {
-            if (!defValues.isEmpty())
+            Object[] objects = assembly(values);
+            switch (objects.length)
             {
-                List<Object> list = new ArrayList<>(Arrays.asList(values));
-                list.addAll(defValues);
-                return (T) method.invoke(null, list.toArray());
+                case 0:
+                    return (T) methodHandle.invoke();
+                case 1:
+                    return (T) methodHandle.invoke(objects[0]);
+                case 2:
+                    return (T) methodHandle.invoke(objects[0],objects[1]);
+                case 3:
+                    return (T) methodHandle.invoke(objects[0],objects[1],objects[2]);
+                case 4:
+                    return (T) methodHandle.invoke(objects[0],objects[1],objects[2],objects[3]);
+                default:
+                    return (T) methodHandle.invokeWithArguments(objects);
             }
-            else
-            {
-                return (T) method.invoke(null, values);
-            }
+//            if (objects.length == 0)
+//            {
+//                return (T) methodHandle.invoke();
+//            }
+//            else
+//            {
+//                return (T) methodHandle.invokeWithArguments(objects);
+//            }
         }
-        catch (IllegalAccessException | InvocationTargetException e)
+        catch (Throwable e)
         {
             throw new RuntimeException(e);
         }
+    }
+
+    private Object[] assembly(Object... values)
+    {
+        Object[] objects = new Object[values.length + defValues.size()];
+        int i = 0;
+        for (Object value : values)
+        {
+            objects[i++] = value;
+        }
+        for (Object defValue : defValues)
+        {
+            objects[i++] = defValue;
+        }
+        return objects;
     }
 }

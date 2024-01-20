@@ -4,6 +4,9 @@ import io.github.kiryu1223.expressionTree.expressions.*;
 import io.github.kiryu1223.expressionTree.plugin.ImportInfo;
 import net.openhft.compiler.CompilerUtils;
 
+import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.MethodType;
 import java.lang.reflect.Method;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -13,6 +16,7 @@ public class DynamicCompilerUtil
 {
     private static final String call = "call";
     private static final String Dynamic_ = "Dynamic_";
+    private static final MethodHandles.Lookup lookup = MethodHandles.lookup();
     private static final ConcurrentHashMap<String, DynamicMethod> DynamicMethodCache = new ConcurrentHashMap<>();
 
     public static DynamicMethod dynamicCompile(LambdaExpression lambdaExpression)
@@ -70,12 +74,14 @@ public class DynamicCompilerUtil
         try
         {
             Class<?> clazz = CompilerUtils.CACHED_COMPILER.loadFromJava(className, code);
-            Method method = clazz.getMethod(call, types.toArray(new Class<?>[0]));
-            dynamicMethod = new DynamicMethod(method, defValues);
+            //Method method = clazz.getMethod(call, types.toArray(new Class<?>[0]));
+            MethodType methodType = MethodType.methodType(lambdaExpression.getReturnType(), types);
+            MethodHandle methodHandle = lookup.findStatic(clazz, call, methodType);
+            dynamicMethod = new DynamicMethod(methodHandle, defValues);
             DynamicMethodCache.put(code, dynamicMethod);
             return dynamicMethod;
         }
-        catch (ClassNotFoundException | NoSuchMethodException e)
+        catch (ClassNotFoundException | NoSuchMethodException | IllegalAccessException e)
         {
             throw new RuntimeException(e);
         }
@@ -159,6 +165,7 @@ public class DynamicCompilerUtil
 
         private void addInfo(Class<?> type)
         {
+            if (type.isPrimitive()) return;
             ImportInfo importInfo = new ImportInfo(type.getCanonicalName(), false);
             if (!importInfos.contains(importInfo))
             {

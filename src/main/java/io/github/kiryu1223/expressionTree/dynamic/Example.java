@@ -1,22 +1,21 @@
 package io.github.kiryu1223.expressionTree.dynamic;
 
+import io.github.kiryu1223.expressionTree.delegate.Action0;
 import io.github.kiryu1223.expressionTree.expressions.*;
 
-import java.lang.String;
-
-public class DynamicCompilationExample
+public class Example
 {
-    // 内存直接动态编译
     public static void main(String[] args) throws Exception
     {
         long start = System.currentTimeMillis();
         System.out.println("动态编译开始");
-        ConstantExpression left = Expression.Constant(1);
+        ParameterExpression left = Expression.Parameter(int.class,"a");
         ConstantExpression right = Expression.Constant(1);
         BinaryExpression binary = Expression.Binary(left, right, OperatorType.EQ);
-        LambdaExpression lambda = Expression.Lambda(binary, new ParameterExpression[0], boolean.class);
+        LambdaExpression lambda = Expression.Lambda(binary, new ParameterExpression[]{left}, boolean.class);
         DynamicMethod compiler = lambda.compile();
-        System.out.println(compiler.<Boolean>invoke());
+        boolean invoke = compiler.<Boolean>invoke(100);
+        System.out.println(invoke);
         System.out.println("动态编译结束，耗时:" + (System.currentTimeMillis() - start) + "ms");
     }
 }

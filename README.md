@@ -67,19 +67,23 @@ package org.example;
 import io.github.kiryu1223.expressionTree.delegate.Action1;
 import io.github.kiryu1223.expressionTree.expressions.ExprTree;
 
+import static io.github.kiryu1223.expressionTree.expressions.ExprTree.Expr;
+
 public class Main
 {
   public static void main(String[] args)
   {
-    ExprTree<Action1<String>> exprTree = new ExprTree<>((s) ->
+    // 注意这里使用了静态导入的Expr方法
+    // 直接使用new ExprTree<>()或者ExprTree.Expr()都是可以的
+    ExprTree<Action1<String>> exprTree = Expr((s) ->
     {
-        System.out.println(s);
+      System.out.println(s);
     });
 
-    System.out.println("lambda代码体为:"+exprTree.getTree());
+    System.out.println("lambda代码体为:" + exprTree.getTree());
     System.out.println("执行lambda结果为:👇");
     exprTree.getDelegate().invoke("hello world");
-    System.out.println("lambda返回类型为:"+exprTree.getTree().getReturnType());
+    System.out.println("lambda返回类型为:" + exprTree.getTree().getReturnType());
   }
 }
 ```
