@@ -1,9 +1,12 @@
 package io.github.kiryu1223.expressionTree.util;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 public class ReflectUtil
 {
@@ -22,7 +25,6 @@ public class ReflectUtil
             if (!fieldMap.containsKey(name))
             {
                 Field declaredField = clazz.getDeclaredField(name);
-                declaredField.setAccessible(true);
                 fieldMap.put(name, declaredField);
             }
             return fieldMap.get(name);
@@ -41,7 +43,6 @@ public class ReflectUtil
             if (!methodMap.containsKey(classes))
             {
                 Method declaredMethod = clazz.getDeclaredMethod(name, classes);
-                declaredMethod.setAccessible(true);
                 methodMap.put(classes, declaredMethod);
             }
             return methodMap.get(classes);
@@ -56,7 +57,6 @@ public class ReflectUtil
                 if (AllAssignableFrom(parameterTypes, classes))
                 {
                     Map<Class<?>[], Method> methodMap = getMethodMap(clazz, name);
-                    declaredMethod.setAccessible(true);
                     methodMap.put(classes, declaredMethod);
                     return declaredMethod;
                 }
@@ -173,5 +173,34 @@ public class ReflectUtil
             }
         }
         return true;
+    }
+
+    public static <T> T getFieldValue(Object o, String name)
+    {
+        try
+        {
+            Field field = getField(o.getClass(), name);
+            field.setAccessible(true);
+            return (T) field.get(o);
+        }
+        catch (IllegalAccessException e)
+        {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public static <T> T invokeMethod(Object o, String name, List<Object> values)
+    {
+        try
+        {
+            List<Class<?>> classes = values.stream().map(a -> a.getClass()).collect(Collectors.toList());
+            Method method = getMethod(o.getClass(), name, classes.toArray(new Class[0]));
+            method.setAccessible(true);
+            return (T) method.invoke(o, values.toArray());
+        }
+        catch (IllegalAccessException | InvocationTargetException e)
+        {
+            throw new RuntimeException(e);
+        }
     }
 }

@@ -18,11 +18,12 @@ import com.sun.tools.javac.util.Names;
 import io.github.kiryu1223.expressionTree.expressions.Expression;
 import io.github.kiryu1223.expressionTree.expressions.Kind;
 import io.github.kiryu1223.expressionTree.expressions.OperatorType;
+import io.github.kiryu1223.expressionTree.util.JDK;
+import io.github.kiryu1223.expressionTree.util.ReflectUtil;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import javax.lang.model.element.TypeElement;
+import java.lang.reflect.InvocationTargetException;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class ExprTreeTaskListener implements TaskListener
@@ -30,16 +31,18 @@ public class ExprTreeTaskListener implements TaskListener
     private final TreeMaker treeMaker;
     private final Types types;
     private final Names names;
+    private final Context context;
     private final Map<Kind, JCTree.JCFieldAccess> methods = new HashMap<>();
     private final Map<JCTree.Tag, JCTree.JCFieldAccess> operators = new HashMap<>();
-    private final Map<String,Map<JCTree.JCFieldAccess, JCTree>> needToChangeClasses = new HashMap<>();
-    private final Map<String,List<JCTree.JCMethodInvocation>> needToChangeRef = new HashMap<>();
+    private final Map<String, Map<JCTree.JCFieldAccess, JCTree>> needToChangeClasses = new HashMap<>();
+    private final Map<String, List<JCTree.JCMethodInvocation>> needToChangeRef = new HashMap<>();
 
     public ExprTreeTaskListener(Context context)
     {
         treeMaker = TreeMaker.instance(context);
         types = Types.instance(context);
         names = Names.instance(context);
+        this.context = context;
         init();
     }
 
@@ -138,8 +141,9 @@ public class ExprTreeTaskListener implements TaskListener
         //System.out.printf("%s 结束 %n", event.getKind());
         try
         {
-            codeReplace(event);
-            typeReplace(event);
+            lambdaToTree(event);
+//            codeReplace(event);
+//            typeReplace(event);
         }
         catch (Throwable e)
         {
@@ -151,7 +155,7 @@ public class ExprTreeTaskListener implements TaskListener
     {
         if (event.getKind() != TaskEvent.Kind.PARSE) return;
         String filename = event.getSourceFile().getName();
-        needToChangeClasses.put(filename,new HashMap<>());
+        needToChangeClasses.put(filename, new HashMap<>());
 
         CompilationUnitTree compUnit = event.getCompilationUnit();
         List<ImportInfo> imports = new ArrayList<>(compUnit.getImports().size());
@@ -178,7 +182,7 @@ public class ExprTreeTaskListener implements TaskListener
                     operators
             );
             classDecl.accept(exprTranslator);
-            needToChangeRef.put(filename,exprTranslator.getNeedToChangeRef());
+            needToChangeRef.put(filename, exprTranslator.getNeedToChangeRef());
         }
     }
 
@@ -202,7 +206,7 @@ public class ExprTreeTaskListener implements TaskListener
                     JCTree.JCLambda lambda = (JCTree.JCLambda) v;
                     if (lambda.getBodyKind() == LambdaExpressionTree.BodyKind.EXPRESSION)
                     {
-                        if (lambda.getBody() instanceof JCTree.JCNewClass&&isAnonymousClass(((JCTree.JCNewClass) lambda.getBody()).getClassBody()))
+                        if (lambda.getBody() instanceof JCTree.JCNewClass && isAnonymousClass(((JCTree.JCNewClass) lambda.getBody()).getClassBody()))
                         {
                             JCTree.JCNewClass body = (JCTree.JCNewClass) lambda.getBody();
                             type.set(body.getIdentifier().type);
@@ -245,11 +249,11 @@ public class ExprTreeTaskListener implements TaskListener
                 JCTree.JCIdent ident = (JCTree.JCIdent) arguments.get(0);
                 if (ident.type.isPrimitive())
                 {
-                    ListBuffer<JCTree.JCExpression> args=new ListBuffer<>();
+                    ListBuffer<JCTree.JCExpression> args = new ListBuffer<>();
                     args.append(arguments.get(0));
                     args.append(arguments.get(1));
                     args.append(treeMaker.Literal(true));
-                    methodInvocation.args=args.toList();
+                    methodInvocation.args = args.toList();
                 }
             }
             methodInvocations.clear();
@@ -259,5 +263,24 @@ public class ExprTreeTaskListener implements TaskListener
     private boolean isAnonymousClass(JCTree tree)
     {
         return tree instanceof JCTree.JCClassDecl && ((JCTree.JCClassDecl) tree).getSimpleName().isEmpty();
+    }
+
+    private void lambdaToTree(TaskEvent event)
+    {
+        if (event.getKind() != TaskEvent.Kind.ANALYZE) return;
+        JCTree.JCCompilationUnit compilationUnit = (JCTree.JCCompilationUnit) event.getCompilationUnit();
+        Object moduleSymbol = null;
+        if (JDK.is9orLater())
+        {
+            moduleSymbol = ReflectUtil.getFieldValue(compilationUnit, "modle");
+        }
+        for (JCTree tree : compilationUnit.getTypeDecls())
+        {
+            if (!(tree instanceof JCTree.JCClassDecl)) continue;
+            JCTree.JCClassDecl classDecl = (JCTree.JCClassDecl) tree;
+            classDecl.accept(JDK.is9orLater() ?
+                    new SugarScanner(context, moduleSymbol)
+                    : new SugarScanner(context));
+        }
     }
 }

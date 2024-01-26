@@ -1,7 +1,10 @@
 package io.github.kiryu1223.expressionTree.dynamic;
 
 import io.github.kiryu1223.expressionTree.delegate.Action0;
+import io.github.kiryu1223.expressionTree.delegate.Func0;
 import io.github.kiryu1223.expressionTree.expressions.*;
+
+import static io.github.kiryu1223.expressionTree.expressions.ExprTree.Expr;
 
 public class Example
 {
@@ -9,7 +12,7 @@ public class Example
     {
         long start = System.currentTimeMillis();
         System.out.println("动态编译开始");
-        ParameterExpression left = Expression.Parameter(int.class,"a");
+        ParameterExpression left = Expression.Parameter(int.class, "a");
         ConstantExpression right = Expression.Constant(1);
         BinaryExpression binary = Expression.Binary(left, right, OperatorType.EQ);
         LambdaExpression lambda = Expression.Lambda(binary, new ParameterExpression[]{left}, boolean.class);

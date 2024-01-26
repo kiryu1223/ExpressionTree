@@ -3,32 +3,26 @@
 
 jdk15后的版本(**不包括jdk15**)因为封装规则的修改，需要往项目根目录下的.mvn/jvm.config
 文件里写入以下指令,可能会提示报错，这是正常的
-> --add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED
->
-> --add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED
->
-> --add-exports=jdk.compiler/com.sun.tools.javac.main=ALL-UNNAMED
-> 
-> --add-exports=jdk.compiler/com.sun.tools.javac.model=ALL-UNNAMED
-> 
-> --add-exports=jdk.compiler/com.sun.tools.javac.parser=ALL-UNNAMED
-> 
-> --add-exports=jdk.compiler/com.sun.tools.javac.processing=ALL-UNNAMED
-> 
-> --add-exports=jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED
-> 
-> --add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED
-> 
-> --add-exports=jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED
-> 
-> --add-exports=jdk.compiler/com.sun.tools.javac.comp=ALL-UNNAMED
+
+```text
+--add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED
+--add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED
+--add-exports=jdk.compiler/com.sun.tools.javac.main=ALL-UNNAMED
+--add-exports=jdk.compiler/com.sun.tools.javac.model=ALL-UNNAMED
+--add-exports=jdk.compiler/com.sun.tools.javac.parser=ALL-UNNAMED
+--add-exports=jdk.compiler/com.sun.tools.javac.processing=ALL-UNNAMED
+--add-exports=jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED
+--add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED
+--add-exports=jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED
+--add-exports=jdk.compiler/com.sun.tools.javac.comp=ALL-UNNAMED
+```
 
 ## maven
 ```xml
 <dependency>
   <groupId>io.github.kiryu1223</groupId>
   <artifactId>ExpressionTree</artifactId>
-  <version>1.1.3</version>
+  <version>1.2.0</version>
 </dependency>
 ```
 
