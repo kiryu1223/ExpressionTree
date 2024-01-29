@@ -6,11 +6,13 @@ public class BlockExpression extends Expression
 {
     private final List<Expression> expressions;
     private final List<ParameterExpression> variables;
+    private final boolean isStatic;
 
-    public BlockExpression(List<Expression> expressions, List<ParameterExpression> variables)
+    public BlockExpression(List<Expression> expressions, List<ParameterExpression> variables, boolean isStatic)
     {
         this.expressions = expressions;
         this.variables = variables;
+        this.isStatic = isStatic;
     }
 
     public List<Expression> getExpressions()

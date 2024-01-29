@@ -1,8 +1,6 @@
 package io.github.kiryu1223.expressionTree.util;
 
-import io.github.kiryu1223.expressionTree.plugin.ExpressionTree;
 import sun.misc.Unsafe;
-import sun.misc.VM;
 
 import java.lang.reflect.Field;
 

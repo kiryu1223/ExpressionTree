@@ -57,9 +57,10 @@ public abstract class Expression
     {
         return new ParameterExpression(type, name);
     }
-    public static NewExpression New(Class<?> type, Expression[] constructorArgs, BlockExpression body)
+
+    public static NewExpression New(Class<?> type, Class<?>[] typeArgs, Expression[] constructorArgs, BlockExpression body)
     {
-        return new NewExpression(type, Arrays.asList(constructorArgs), body);
+        return new NewExpression(type, Arrays.asList(typeArgs), Arrays.asList(constructorArgs), body);
     }
 
     public static LambdaExpression Lambda(Expression body, ParameterExpression[] parameters, Class<?> returnType)
@@ -67,14 +68,19 @@ public abstract class Expression
         return new LambdaExpression(body, Arrays.asList(parameters), returnType);
     }
 
-    public static BlockExpression Block(Expression[] expressions, ParameterExpression[] variables)
+    public static BlockExpression Block(Expression[] expressions, ParameterExpression[] variables, boolean isStatic)
     {
-        return new BlockExpression(Arrays.asList(expressions), Arrays.asList(variables));
+        return new BlockExpression(Arrays.asList(expressions), Arrays.asList(variables), isStatic);
+    }
+
+    public static BlockExpression Block(Expression[] expressions, boolean isStatic)
+    {
+        return Block(expressions, new ParameterExpression[0], isStatic);
     }
 
     public static BlockExpression Block(Expression[] expressions)
     {
-        return new BlockExpression(Arrays.asList(expressions), Collections.emptyList());
+        return Block(expressions, false);
     }
 
     public static VariableExpression Variable(ParameterExpression parameter, Expression init)

@@ -5,12 +5,14 @@ import java.util.List;
 public class NewExpression extends Expression
 {
     private final Class<?> type;
+    private final List<Class<?>> typeArgs;
     private final List<Expression> constructorArgs;
     private final BlockExpression classBody;
 
-    public NewExpression(Class<?> type, List<Expression> constructorArgs, BlockExpression classBody)
+    public NewExpression(Class<?> type, List<Class<?>> typeArgs, List<Expression> constructorArgs, BlockExpression classBody)
     {
         this.type = type;
+        this.typeArgs = typeArgs;
         this.constructorArgs = constructorArgs;
         this.classBody = classBody;
     }
@@ -18,6 +20,11 @@ public class NewExpression extends Expression
     public Class<?> getType()
     {
         return type;
+    }
+
+    public List<Class<?>> getTypeArgs()
+    {
+        return typeArgs;
     }
 
     public List<Expression> getConstructorArgs()

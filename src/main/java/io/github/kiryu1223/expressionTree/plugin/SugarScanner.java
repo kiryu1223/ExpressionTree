@@ -188,7 +188,7 @@ public class SugarScanner extends TreeScanner
             if (clazz == char.class) return symtab.charType;
             if (clazz == float.class) return symtab.floatType;
             if (clazz == double.class) return symtab.doubleType;
-            if (clazz == void.class) return symtab.botType;
+            if (clazz == void.class) return symtab.voidType;
         }
         return getClassSymbol(clazz).asType();
     }
@@ -659,12 +659,13 @@ public class SugarScanner extends TreeScanner
                         if (member.getKind() != Tree.Kind.BLOCK) continue;
                         body.append(deepMake(member));
                     }
-                    classes.add(BlockExpression.class);
-                    all.append(treeMaker.App(
-                            getFactoryMethod(Block, Collections.singletonList(Expression[].class)),
-                            List.of(makeArray(Expression.class, body.toList()))
-                    ));
                 }
+                classes.add(BlockExpression.class);
+                all.append(treeMaker.App(
+                        getFactoryMethod(Block, Collections.singletonList(Expression[].class)),
+                        List.of(makeArray(Expression.class, body.toList()))
+                ));
+
                 return treeMaker.App(
                         getFactoryMethod(New, classes),
                         all.toList()
