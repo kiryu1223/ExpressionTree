@@ -5,12 +5,12 @@ import com.sun.source.util.Plugin;
 import com.sun.tools.javac.api.BasicJavacTask;
 import io.github.kiryu1223.expressionTree.util.JDK;
 
-public class ExpressionTreePlugin implements Plugin
+public class ExpressionTree implements Plugin
 {
     @Override
     public String getName()
     {
-        return "ExpressionTreePlugin";
+        return "ExpressionTree";
     }
 
     @Override

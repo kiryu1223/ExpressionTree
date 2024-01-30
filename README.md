@@ -4,6 +4,11 @@
 jdk15后的版本(**不包括jdk15**)因为封装规则的修改，需要往项目根目录下的.mvn/jvm.config
 文件里写入以下指令,可能会提示报错，这是正常的
 
+
+**注意了注意了‼️‼️‼️**
+<br>因为升级实现的缘故，暂时把主动创建ExprTree对象的形式给不支持了，等哪天有空了再加回来
+
+
 ```text
 --add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED
 --add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED
@@ -45,11 +50,11 @@ jdk15后的版本(**不包括jdk15**)因为封装规则的修改，需要往项�
     </plugins>
 </build>
 ```
+### 注解
++ @Expr
+  为你需要替换lambda参数为表达式树的方法形参上加入此注解，该方法的其余参数必须一致
 
 ### 表达式对象
-+ #### ExprTree
-  核心类，该类的构造函数为一个lambda表达式，表达式插件会在代码编译时读取lambda的内容并生成表达式对象，
-  以构造函数的形式记录在第二个参数里，运行时可以获取代码的表达式对象
 + #### Expression
   表达式对象抽象基类，内置生成所有表达式对象的工厂方法以及访问者模式，
   每个实现类都实现了获取自身携带参数和自己的类型的方法
@@ -65,20 +70,31 @@ import static io.github.kiryu1223.expressionTree.expressions.ExprTree.Expr;
 
 public class Main
 {
-  public static void main(String[] args)
-  {
-    // 注意这里使用了静态导入的Expr方法
-    // 直接使用new ExprTree<>()或者ExprTree.Expr()都是可以的
-    ExprTree<Action1<String>> exprTree = Expr((s) ->
+    public static void main(String[] args) throws Exception
     {
-      System.out.println(s);
-    });
+//        long start = System.currentTimeMillis();
+//        System.out.println("动态编译开始");
+//        ParameterExpression left = Expression.Parameter(int.class, "a");
+//        ConstantExpression right = Expression.Constant(1);
+//        BinaryExpression binary = Expression.Binary(left, right, OperatorType.EQ);
+//        LambdaExpression lambda = Expression.Lambda(binary, new ParameterExpression[]{left}, boolean.class);
+//        DynamicMethod compiler = lambda.compile();
+//        boolean invoke = compiler.<Boolean>invoke(100);
+//        System.out.println(invoke);
+//        System.out.println("动态编译结束，耗时:" + (System.currentTimeMillis() - start) + "ms");
 
-    System.out.println("lambda代码体为:" + exprTree.getTree());
-    System.out.println("执行lambda结果为:👇");
-    exprTree.getDelegate().invoke("hello world");
-    System.out.println("lambda返回类型为:" + exprTree.getTree().getReturnType());
-  }
+        test(s -> System.out.println(s));
+    }
+
+    static void test(@Expr Action1<String> action)
+    {
+        throw new RuntimeException();
+    }
+
+    static void test(ExprTree<Action1<String>> action)
+    {
+        System.out.println("lambda代码体为:" + action.getTree());
+    }
 }
 ```
 执行结果
@@ -86,8 +102,5 @@ public class Main
 lambda代码体为:(s) -> {
     System.out.println(s);
 }
-执行lambda结果为:👇
-hello world
-lambda返回类型为:void
 ```
 
