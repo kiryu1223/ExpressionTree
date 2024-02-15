@@ -27,7 +27,7 @@ jdk15后的版本(**不包括jdk15**)因为封装规则的修改，需要往项�
 <dependency>
   <groupId>io.github.kiryu1223</groupId>
   <artifactId>ExpressionTree</artifactId>
-  <version>1.2.0</version>
+  <version>1.2.2</version>
 </dependency>
 ```
 
@@ -72,17 +72,6 @@ public class Main
 {
     public static void main(String[] args) throws Exception
     {
-//        long start = System.currentTimeMillis();
-//        System.out.println("动态编译开始");
-//        ParameterExpression left = Expression.Parameter(int.class, "a");
-//        ConstantExpression right = Expression.Constant(1);
-//        BinaryExpression binary = Expression.Binary(left, right, OperatorType.EQ);
-//        LambdaExpression lambda = Expression.Lambda(binary, new ParameterExpression[]{left}, boolean.class);
-//        DynamicMethod compiler = lambda.compile();
-//        boolean invoke = compiler.<Boolean>invoke(100);
-//        System.out.println(invoke);
-//        System.out.println("动态编译结束，耗时:" + (System.currentTimeMillis() - start) + "ms");
-
         test(s -> System.out.println(s));
     }
 
