@@ -1,5 +1,7 @@
 package io.github.kiryu1223.expressionTree.expressions;
 
+import io.github.kiryu1223.expressionTree.delegate.Delegate;
+
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.Arrays;
@@ -63,9 +65,9 @@ public abstract class Expression
         return new NewExpression(type, Arrays.asList(typeArgs), Arrays.asList(constructorArgs), body);
     }
 
-    public static LambdaExpression Lambda(Expression body, ParameterExpression[] parameters, Class<?> returnType)
+    public static <T extends Delegate> LambdaExpression<T> Lambda(Expression body, ParameterExpression[] parameters, Class<?> returnType)
     {
-        return new LambdaExpression(body, Arrays.asList(parameters), returnType);
+        return new LambdaExpression<>(body, Arrays.asList(parameters), returnType);
     }
 
     public static BlockExpression Block(Expression[] expressions, ParameterExpression[] variables, boolean isStatic)

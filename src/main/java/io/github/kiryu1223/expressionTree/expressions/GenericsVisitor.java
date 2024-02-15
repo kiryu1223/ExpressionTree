@@ -34,7 +34,7 @@ public abstract class GenericsVisitor<V>
                 visit((BlockExpression) expression, v);
                 break;
             case Lambda:
-                visit((LambdaExpression) expression, v);
+                visit((LambdaExpression<?>) expression, v);
                 break;
             case Variable:
                 visit((VariableExpression) expression, v);
@@ -118,7 +118,7 @@ public abstract class GenericsVisitor<V>
 
     public void visit(BlockExpression blockExpression, V v) {}
 
-    public void visit(LambdaExpression lambdaExpression, V v) {}
+    public void visit(LambdaExpression<?> lambdaExpression, V v) {}
 
     public void visit(VariableExpression variableExpression, V v) {}
 

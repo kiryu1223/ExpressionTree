@@ -9,37 +9,17 @@ import java.util.function.Function;
 public final class ExprTree<T extends Delegate>
 {
     private final T delegate;
-    private LambdaExpression tree;
+    private final LambdaExpression<T> tree;
 
-    public ExprTree(T delegate)
-    {
-        this.delegate = delegate;
-    }
-
-    public static <T extends Delegate> ExprTree<T> ExprTree(T delegate)
-    {
-        return new ExprTree<T>(delegate);
-    }
-
-    public static <T extends Delegate> ExprTree<T> ExprTree(T delegate, LambdaExpression tree)
-    {
-        return new ExprTree<T>(delegate, tree);
-    }
-
-    public static <T extends Delegate> ExprTree<T> Expr(T delegate)
-    {
-        return new ExprTree<T>(delegate);
-    }
-
-    public static <T extends Delegate> ExprTree<T> Expr(T delegate, LambdaExpression tree)
-    {
-        return new ExprTree<T>(delegate, tree);
-    }
-
-    public ExprTree(T delegate, LambdaExpression tree)
+    private ExprTree(T delegate, LambdaExpression<T> tree)
     {
         this.delegate = delegate;
         this.tree = tree;
+    }
+
+    public static <T extends Delegate> ExprTree<T> Expr(T delegate, LambdaExpression<T> tree)
+    {
+        return new ExprTree<T>(delegate, tree);
     }
 
     public T getDelegate()
@@ -47,7 +27,7 @@ public final class ExprTree<T extends Delegate>
         return delegate;
     }
 
-    public LambdaExpression getTree()
+    public LambdaExpression<T> getTree()
     {
         return tree;
     }

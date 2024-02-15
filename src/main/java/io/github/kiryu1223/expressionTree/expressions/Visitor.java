@@ -36,7 +36,7 @@ public abstract class Visitor
                 visit((BlockExpression) expression);
                 break;
             case Lambda:
-                visit((LambdaExpression) expression);
+                visit((LambdaExpression<?>) expression);
                 break;
             case Variable:
                 visit((VariableExpression) expression);
@@ -120,7 +120,7 @@ public abstract class Visitor
 
     public void visit(BlockExpression blockExpression) {}
 
-    public void visit(LambdaExpression lambdaExpression) {}
+    public void visit(LambdaExpression<?> lambdaExpression) {}
 
     public void visit(VariableExpression variableExpression) {}
 

@@ -1,11 +1,12 @@
 package io.github.kiryu1223.expressionTree.expressions;
 
+import io.github.kiryu1223.expressionTree.delegate.Delegate;
 import io.github.kiryu1223.expressionTree.dynamic.DynamicCompilerUtil;
 import io.github.kiryu1223.expressionTree.dynamic.DynamicMethod;
 
 import java.util.List;
 
-public class LambdaExpression extends Expression
+public class LambdaExpression<T extends Delegate> extends Expression
 {
     private final Expression body;
     private final List<ParameterExpression> parameters;
@@ -62,12 +63,12 @@ public class LambdaExpression extends Expression
     {
         if (this == obj) return true;
         if (obj == null || getClass() != obj.getClass()) return false;
-        LambdaExpression that = (LambdaExpression) obj;
+        LambdaExpression<T> that = (LambdaExpression<T>) obj;
         return body.equals(that.body) && parameters.equals(that.parameters)
                 && returnType.equals(that.returnType);
     }
 
-    public DynamicMethod compile()
+    public T compile()
     {
         return DynamicCompilerUtil.dynamicCompile(this);
     }

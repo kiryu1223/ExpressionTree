@@ -1,5 +1,6 @@
 package io.github.kiryu1223.expressionTree.dynamic;
 
+import io.github.kiryu1223.expressionTree.delegate.Delegate;
 import io.github.kiryu1223.expressionTree.expressions.*;
 import io.github.kiryu1223.expressionTree.plugin.ImportInfo;
 import net.openhft.compiler.CompilerUtils;
@@ -7,6 +8,7 @@ import net.openhft.compiler.CompilerUtils;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -14,12 +16,12 @@ import java.util.concurrent.ConcurrentHashMap;
 //@Deprecated
 public class DynamicCompilerUtil
 {
-    private static final String call = "call";
+    private static final String func = "func";
     private static final String Dynamic_ = "Dynamic_";
     private static final MethodHandles.Lookup lookup = MethodHandles.lookup();
-    private static final ConcurrentHashMap<String, DynamicMethod> DynamicMethodCache = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<String, DynamicMethod<?>> DynamicMethodCache = new ConcurrentHashMap<>();
 
-    public static DynamicMethod dynamicCompile(LambdaExpression lambdaExpression)
+    public static <T extends Delegate> T dynamicCompile(LambdaExpression<T> lambdaExpression)
     {
 //        try
 //        {
@@ -66,28 +68,23 @@ public class DynamicCompilerUtil
         List<Object> defValues = new ArrayList<>();
         String className = Dynamic_ + UUID.randomUUID().toString().replace("-", "");
         String code = writeCode(className, lambdaExpression, defValues, types);
-        DynamicMethod dynamicMethod = DynamicMethodCache.get(code);
-        if (dynamicMethod != null)
-        {
-            return dynamicMethod;
-        }
         try
         {
             Class<?> clazz = CompilerUtils.CACHED_COMPILER.loadFromJava(className, code);
+            Field field = clazz.getField(func);
+            return (T) field.get(clazz);
             //Method method = clazz.getMethod(call, types.toArray(new Class<?>[0]));
-            MethodType methodType = MethodType.methodType(lambdaExpression.getReturnType(), types);
-            MethodHandle methodHandle = lookup.findStatic(clazz, call, methodType);
-            dynamicMethod = new DynamicMethod(methodHandle, defValues);
-            DynamicMethodCache.put(code, dynamicMethod);
-            return dynamicMethod;
+//            MethodType methodType = MethodType.methodType(lambdaExpression.getReturnType(), types);
+//            MethodHandle methodHandle = lookup.findStatic(clazz, call, methodType);
+
         }
-        catch (ClassNotFoundException | NoSuchMethodException | IllegalAccessException e)
+        catch (ClassNotFoundException | NoSuchFieldException | IllegalAccessException e)
         {
             throw new RuntimeException(e);
         }
     }
 
-    private static String writeCode(String classNane, LambdaExpression lambdaExpression, List<Object> defValues, List<Class<?>> types)
+    private static <T extends Delegate> String writeCode(String classNane, LambdaExpression<T> lambdaExpression, List<Object> defValues, List<Class<?>> types)
     {
         List<ParameterExpression> parameters = lambdaExpression.getParameters();
         Expression body = lambdaExpression.getBody();
@@ -113,7 +110,7 @@ public class DynamicCompilerUtil
         code.append("public class ").append(classNane).append(" {\n");
         //入参参数
         code.append("public static ");
-        code.append(returnType.getSimpleName()).append(" ").append(call).append(" (");
+        code.append(returnType.getSimpleName()).append(" ").append(func).append(" (");
         for (ParameterExpression parameter : parameters)
         {
             code.append(parameter.getType().getSimpleName()).append(" ")

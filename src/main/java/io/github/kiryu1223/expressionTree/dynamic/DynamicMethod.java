@@ -1,12 +1,14 @@
 package io.github.kiryu1223.expressionTree.dynamic;
 
+import io.github.kiryu1223.expressionTree.delegate.Delegate;
+
 import java.lang.invoke.MethodHandle;
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-public class DynamicMethod
+public class DynamicMethod<T extends Delegate>
 {
     private final MethodHandle methodHandle;
     private final List<Object> defValues;
@@ -17,7 +19,7 @@ public class DynamicMethod
         this.defValues = defValues;
     }
 
-    public <T> T invoke(Object... values)
+    public T invoke(Object... values)
     {
         try
         {

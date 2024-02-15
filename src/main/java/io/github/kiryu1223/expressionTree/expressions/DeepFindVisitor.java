@@ -54,7 +54,7 @@ public class DeepFindVisitor
                 visit((BlockExpression) expression);
                 break;
             case Lambda:
-                visit((LambdaExpression) expression);
+                visit((LambdaExpression<?>) expression);
                 break;
             case Variable:
                 visit((VariableExpression) expression);
@@ -163,7 +163,7 @@ public class DeepFindVisitor
         deep(blockExpression.getExpressions());
     }
 
-    public void visit(LambdaExpression lambdaExpression)
+    public void visit(LambdaExpression<?> lambdaExpression)
     {
         deep(lambdaExpression.getParameters());
         deep(lambdaExpression.getBody());

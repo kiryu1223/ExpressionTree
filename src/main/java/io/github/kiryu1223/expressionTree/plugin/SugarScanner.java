@@ -2,6 +2,7 @@ package io.github.kiryu1223.expressionTree.plugin;
 
 import com.sun.source.tree.Tree;
 import com.sun.source.tree.VariableTree;
+import com.sun.source.util.SimpleTreeVisitor;
 import com.sun.tools.javac.code.*;
 import com.sun.tools.javac.main.JavaCompiler;
 import com.sun.tools.javac.tree.JCTree;
@@ -98,13 +99,7 @@ public class SugarScanner extends TreeScanner
             for (Symbol.VarSymbol parameter : parameters)
             {
                 Type type = parameter.asType();
-                if (type instanceof Type.TypeVar)
-                {
-                    Type.TypeVar typeVar = (Type.TypeVar) type;
-                    Type upperBound = typeVar.getUpperBound();
-                    type = upperBound != null ? upperBound : symtab.objectType;
-                }
-                vars.append(type);
+                vars.append(types.erasure(type));
             }
             if (!types.isSubtypes(argTypes.toList(), vars.toList())) continue;
             return methodSymbol;
@@ -130,12 +125,12 @@ public class SugarScanner extends TreeScanner
             for (Symbol.VarSymbol parameter : parameters)
             {
                 Type type = parameter.asType();
-                if (type instanceof Type.TypeVar)
-                {
-                    Type.TypeVar typeVar = (Type.TypeVar) type;
-                    Type upperBound = typeVar.getUpperBound();
-                    type = upperBound != null ? upperBound : symtab.objectType;
-                }
+//                if (type instanceof Type.TypeVar)
+//                {
+//                    Type.TypeVar typeVar = (Type.TypeVar) type;
+//                    Type upperBound = typeVar.getUpperBound();
+//                    type = upperBound != null ? upperBound : symtab.objectType;
+//                }
                 vars.append(types.erasure(type));
             }
             if (!types.isSubtypes(argTypes.toList(), vars.toList())) continue;
@@ -166,15 +161,6 @@ public class SugarScanner extends TreeScanner
         }
         return classSymbol;
     }
-
-//    private Symbol.ClassSymbol getClassSymbol(Type type)
-//    {
-//        Type erasure = types.erasure(type);
-//        Name name = names.fromString(erasure.toString());
-//        Symbol.ClassSymbol classSymbol = symtab.classes.get(name);
-//        if (classSymbol == null) classSymbol = ;
-//        return (Symbol.ClassSymbol) javaCompiler.resolveIdent(erasure.toString());
-//    }
 
     private Type getType(Class<?> clazz)
     {
@@ -321,6 +307,7 @@ public class SugarScanner extends TreeScanner
         private final ListBuffer<JCTree.JCStatement> jcStatements;
         private final Map<Name, JCTree.JCVariableDecl> variableDeclMap = new HashMap<>();
         private final Map<Name, JCTree.JCVariableDecl> tempVariableDeclMap = new HashMap<>();
+        private final Map<JCTree.JCLambda, JCTree.JCVariableDecl> tempLambdaMap = new HashMap<>();
         private final Symbol owner;
 
         public SugarTranslator(ListBuffer<JCTree.JCStatement> jcStatements, Symbol owner)
@@ -361,7 +348,7 @@ public class SugarScanner extends TreeScanner
                     }
                     JCTree.JCLambda lambda = (JCTree.JCLambda) jcExpression;
                     flag = true;
-                    JCTree.JCMethodInvocation built = buildExpr(lambda);
+                    JCTree.JCExpression built = buildExpr(lambda);
                     Symbol.MethodSymbol expr = getMethodSymbol(ExprTree.class, "Expr", Arrays.asList(Delegate.class, LambdaExpression.class));
                     JCTree.JCExpression fa = refMakeSelector(treeMaker.Ident(getClassSymbol(ExprTree.class)), expr);
                     JCTree.JCMethodInvocation apply = treeMaker.App(fa, List.of(jcExpression, built));
@@ -408,24 +395,48 @@ public class SugarScanner extends TreeScanner
                     ));
         }
 
-        private JCTree.JCMethodInvocation buildExpr(JCTree.JCLambda lambda)
+        private JCTree.JCVariableDecl getLocalLambdaExpr(JCTree.JCExpression body, ListBuffer<JCTree.JCExpression> args, Type returnType, Type gt)
         {
-            Type.MethodType methodType = (Type.MethodType) types.findDescriptorType(lambda.type);
-            Type.ClassType returnType = (Type.ClassType) methodType.getReturnType();
-            ListBuffer<JCTree.JCExpression> args = new ListBuffer<>();
-            for (VariableTree variableTree : lambda.getParameters())
+            Type type;
+            if (returnType instanceof Type.ClassType)
             {
-                JCTree.JCVariableDecl jcVariableDecl = (JCTree.JCVariableDecl) variableTree;
-                JCTree.JCVariableDecl localVar = getLocalVar(jcVariableDecl.type, jcVariableDecl.getName().toString());
-                args.append(treeMaker.Ident(localVar));
-                variableDeclMap.put(jcVariableDecl.getName(), localVar);
-                jcStatements.append(localVar);
+                Type.ClassType classType = (Type.ClassType) returnType;
+                type = classType.asElement().isAnonymous()
+                        ? classType.supertype_field : classType;
             }
-            JCTree.JCExpression body = deepMake(lambda.getBody());
-            return treeMaker.App(
-                    getFactoryMethod(Lambda, Arrays.asList(Expression.class, ParameterExpression[].class, Class.class)),
-                    List.of(body, makeArray(ParameterExpression.class, args.toList()), treeMaker.ClassLiteral(returnType.asElement().isAnonymous() ? returnType.supertype_field : returnType))
+            else
+            {
+                type = returnType;
+            }
+//            JCTree.JCTypeApply typeApply = treeMaker.TypeApply(
+//                    treeMaker.Ident(getClassSymbol(LambdaExpression.class)),
+//                    List.of(treeMaker.Ident(gt.asElement()))
+//            );
+            Type.ClassType classType = new Type.ClassType(
+                    Type.noType,
+                    List.of(gt),
+                    getClassSymbol(LambdaExpression.class)
             );
+            return treeMaker.VarDef(
+                    new Symbol.VarSymbol(
+                            Flags.HASINIT + Flags.EFFECTIVELY_FINAL,
+                            names.fromString(getNextLambdaParameter()),
+                            classType,
+                            owner
+                    ),
+                    treeMaker.App(
+                            getFactoryMethod(Lambda, Arrays.asList(Expression.class, ParameterExpression[].class, Class.class)),
+                            List.of(
+                                    body,
+                                    makeArray(ParameterExpression.class, args.toList()),
+                                    treeMaker.ClassLiteral(type)
+                            )
+                    ));
+        }
+
+        private JCTree.JCExpression buildExpr(JCTree.JCLambda lambda)
+        {
+            return deepMake(lambda);
         }
 
         private JCTree.JCExpression deepMake(JCTree tree)
@@ -475,15 +486,31 @@ public class SugarScanner extends TreeScanner
             {
                 JCTree.JCMethodInvocation jcMethodInvocation = (JCTree.JCMethodInvocation) tree;
                 JCTree.JCExpression methodSelect = jcMethodInvocation.getMethodSelect();
-                List<JCTree.JCExpression> arguments = jcMethodInvocation.getArguments();
                 ListBuffer<JCTree.JCExpression> ts = new ListBuffer<>();
+                for (Type parameterType : methodSelect.type.getParameterTypes())
+                {
+                    ts.append(treeMaker.ClassLiteral(parameterType));
+                }
+                List<JCTree.JCExpression> arguments = jcMethodInvocation.getArguments();
                 ListBuffer<JCTree.JCExpression> args = new ListBuffer<>();
                 for (JCTree.JCExpression argument : arguments)
                 {
-                    args.append(deepMake(argument));
-                    ts.append(treeMaker.ClassLiteral(argument.type));
+                    if (argument instanceof JCTree.JCMethodInvocation &&
+                            ((JCTree.JCMethodInvocation) argument).getArguments().size() == 2 &&
+                            ((JCTree.JCMethodInvocation) argument).getArguments().get(0).getKind() == Tree.Kind.LAMBDA_EXPRESSION &&
+                            argument.type.tsym.equals(getClassSymbol(ExprTree.class)))
+                    {
+                        JCTree.JCMethodInvocation invoke = (JCTree.JCMethodInvocation) argument;
+                        JCTree.JCLambda lambda = (JCTree.JCLambda) invoke.getArguments().get(0);
+                        JCTree.JCVariableDecl variableDecl = tempLambdaMap.get(lambda);
+                        JCTree.JCExpression ag = treeMaker.Ident(variableDecl);
+                        args.append(ag);
+                    }
+                    else
+                    {
+                        args.append(deepMake(argument));
+                    }
                 }
-
                 Symbol symbol;
                 if (methodSelect instanceof JCTree.JCIdent)
                 {
@@ -520,13 +547,23 @@ public class SugarScanner extends TreeScanner
             else if (tree instanceof JCTree.JCFieldAccess)
             {
                 JCTree.JCFieldAccess jcFieldAccess = (JCTree.JCFieldAccess) tree;
-                return treeMaker.App(
-                        getFactoryMethod(FieldSelect, Arrays.asList(Expression.class, Field.class)),
-                        List.of(
-                                deepMake(jcFieldAccess.getExpression()),
-                                reflectField(jcFieldAccess.type, jcFieldAccess.getIdentifier().toString())
-                        )
-                );
+                if (jcFieldAccess.sym.getKind() == ElementKind.CLASS)
+                {
+                    return treeMaker.App(
+                            getFactoryMethod(StaticClass, Collections.singletonList(Class.class)),
+                            List.of(treeMaker.ClassLiteral(jcFieldAccess.type))
+                    );
+                }
+                else
+                {
+                    return treeMaker.App(
+                            getFactoryMethod(FieldSelect, Arrays.asList(Expression.class, Field.class)),
+                            List.of(
+                                    deepMake(jcFieldAccess.getExpression()),
+                                    reflectField(jcFieldAccess.getExpression().type, jcFieldAccess.getIdentifier().toString())
+                            )
+                    );
+                }
             }
             else if (tree instanceof JCTree.JCParens)
             {
@@ -651,6 +688,7 @@ public class SugarScanner extends TreeScanner
                 //body
                 ListBuffer<JCTree.JCExpression> body = new ListBuffer<>();
                 JCTree.JCClassDecl classBody = jcNewClass.getClassBody();
+                classes.add(BlockExpression.class);
                 if (classBody != null)
                 {
                     //todo:目前只有初始化代码块可以被记录
@@ -659,12 +697,15 @@ public class SugarScanner extends TreeScanner
                         if (member.getKind() != Tree.Kind.BLOCK) continue;
                         body.append(deepMake(member));
                     }
+                    all.append(treeMaker.App(
+                            getFactoryMethod(Block, Collections.singletonList(Expression[].class)),
+                            List.of(makeArray(Expression.class, body.toList()))
+                    ));
                 }
-                classes.add(BlockExpression.class);
-                all.append(treeMaker.App(
-                        getFactoryMethod(Block, Collections.singletonList(Expression[].class)),
-                        List.of(makeArray(Expression.class, body.toList()))
-                ));
+                else
+                {
+                    all.append(getNull());
+                }
 
                 return treeMaker.App(
                         getFactoryMethod(New, classes),
@@ -917,6 +958,41 @@ public class SugarScanner extends TreeScanner
                         getFactoryMethod(TypeCast, Arrays.asList(Class.class, Expression.class)),
                         List.of(target, expr)
                 );
+            }
+            else if (tree instanceof JCTree.JCLambda)
+            {
+                JCTree.JCLambda lambda = (JCTree.JCLambda) tree;
+                JCTree.JCVariableDecl localLambdaExpr;
+                if (tempLambdaMap.containsKey(lambda))
+                {
+                    localLambdaExpr = tempLambdaMap.get(lambda);
+                }
+                else
+                {
+                    Type.MethodType methodType = (Type.MethodType) types.findDescriptorType(lambda.type);
+                    Type returnType = methodType.getReturnType();
+                    ListBuffer<JCTree.JCExpression> args = new ListBuffer<>();
+                    for (VariableTree variableTree : lambda.getParameters())
+                    {
+                        JCTree.JCVariableDecl jcVariableDecl = (JCTree.JCVariableDecl) variableTree;
+                        JCTree.JCVariableDecl localVar = getLocalVar(jcVariableDecl.type, jcVariableDecl.getName().toString());
+                        args.append(treeMaker.Ident(localVar));
+                        variableDeclMap.put(jcVariableDecl.getName(), localVar);
+                        jcStatements.append(localVar);
+                    }
+                    JCTree.JCExpression body = deepMake(lambda.getBody());
+                    localLambdaExpr = getLocalLambdaExpr(
+                            body,
+                            args,
+                            returnType.asElement().isAnonymous()
+                                    ? ((Type.ClassType) returnType).getEnclosingType()
+                                    : returnType,
+                            lambda.type
+                    );
+                    jcStatements.append(localLambdaExpr);
+                    tempLambdaMap.put(lambda, localLambdaExpr);
+                }
+                return treeMaker.Ident(localLambdaExpr);
             }
             throw new RuntimeException("不支持的类型:" + tree.type + "\n" + tree);
         }
