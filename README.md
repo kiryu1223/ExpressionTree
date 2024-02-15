@@ -1,4 +1,7 @@
 # ExpressionTree
+
+qq交流群：497125166
+
 支持jdk8至21
 
 jdk15后的版本(**不包括jdk15**)因为封装规则的修改，需要往项目根目录下的.mvn/jvm.config
