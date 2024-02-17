@@ -25,6 +25,11 @@ public class BlockExpression extends Expression
         return variables;
     }
 
+    public boolean isStatic()
+    {
+        return isStatic;
+    }
+
     @Override
     public Kind getKind()
     {

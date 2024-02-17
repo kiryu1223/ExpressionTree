@@ -29,6 +29,12 @@ public class ReferenceExpression extends Expression
     }
 
     @Override
+    public Object getValue()
+    {
+        return getRef();
+    }
+
+    @Override
     public Kind getKind()
     {
         return Kind.Reference;

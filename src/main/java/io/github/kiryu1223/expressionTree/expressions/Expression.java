@@ -5,10 +5,28 @@ import io.github.kiryu1223.expressionTree.delegate.Delegate;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.Arrays;
-import java.util.Collections;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public abstract class Expression
 {
+    public Object getValue()
+    {
+        return null;
+    }
+    protected boolean hasParameterExpression()
+    {
+        AtomicBoolean flag = new AtomicBoolean(false);
+        this.accept(new DeepFindVisitor()
+        {
+            @Override
+            public void visit(ParameterExpression parameterExpression)
+            {
+                flag.set(true);
+            }
+        });
+
+        return flag.get();
+    }
     public abstract Kind getKind();
 
     public abstract String toString();
@@ -52,7 +70,12 @@ public abstract class Expression
 
     public static MethodCallExpression MethodCall(Expression expr, Method method, Expression[] args)
     {
-        return new MethodCallExpression(expr, method, Arrays.asList(args));
+        return new MethodCallExpression(expr, method, Arrays.asList(args), null);
+    }
+
+    public static MethodCallExpression MethodCall(Expression expr, Method method, Expression[] args, OperatorType operatorType)
+    {
+        return new MethodCallExpression(expr, method, Arrays.asList(args), operatorType);
     }
 
     public static ParameterExpression Parameter(Class<?> type, String name)

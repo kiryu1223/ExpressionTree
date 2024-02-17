@@ -278,9 +278,10 @@ public class ExprTreeTaskListener implements TaskListener
         {
             if (!(tree instanceof JCTree.JCClassDecl)) continue;
             JCTree.JCClassDecl classDecl = (JCTree.JCClassDecl) tree;
-            classDecl.accept(JDK.is9orLater() ?
-                    new SugarScanner(context, moduleSymbol)
-                    : new SugarScanner(context));
+            Type thiz = classDecl.type;
+            classDecl.accept(JDK.is9orLater()
+                    ? new SugarScanner(thiz, context, moduleSymbol)
+                    : new SugarScanner(thiz, context));
         }
     }
 }
