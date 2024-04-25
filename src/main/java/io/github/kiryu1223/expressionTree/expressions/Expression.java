@@ -70,12 +70,7 @@ public abstract class Expression
 
     public static MethodCallExpression MethodCall(Expression expr, Method method, Expression[] args)
     {
-        return new MethodCallExpression(expr, method, Arrays.asList(args), null);
-    }
-
-    public static MethodCallExpression MethodCall(Expression expr, Method method, Expression[] args, OperatorType operatorType)
-    {
-        return new MethodCallExpression(expr, method, Arrays.asList(args), operatorType);
+        return new MethodCallExpression(expr, method, Arrays.asList(args));
     }
 
     public static ParameterExpression Parameter(Class<?> type, String name)

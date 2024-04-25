@@ -3,6 +3,7 @@ package io.github.kiryu1223.expressionTree.expressions;
 import io.github.kiryu1223.expressionTree.util.ReflectUtil;
 
 import java.lang.reflect.Field;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class FieldSelectExpression extends Expression
@@ -60,5 +61,15 @@ public class FieldSelectExpression extends Expression
         if (obj == null || getClass() != obj.getClass()) return false;
         FieldSelectExpression that = (FieldSelectExpression) obj;
         return expr.equals(that.expr) && field.equals(that.field);
+    }
+
+    public boolean inParameters(List<ParameterExpression> parameters)
+    {
+        if (expr instanceof ParameterExpression)
+        {
+            ParameterExpression parameter = (ParameterExpression) expr;
+            return parameters.contains(parameter);
+        }
+        return false;
     }
 }

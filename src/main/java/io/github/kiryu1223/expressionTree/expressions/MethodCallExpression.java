@@ -10,14 +10,12 @@ public class MethodCallExpression extends Expression
     private final Expression expr;
     private final Method method;
     private final List<Expression> args;
-    private final OperatorType operatorType;
 
-    public MethodCallExpression(Expression expr, Method method, List<Expression> args, OperatorType operatorType)
+    public MethodCallExpression(Expression expr, Method method, List<Expression> args)
     {
         this.expr = expr;
         this.method = method;
         this.args = args;
-        this.operatorType = operatorType;
     }
 
     public Expression getExpr()
@@ -51,11 +49,6 @@ public class MethodCallExpression extends Expression
         {
             throw new RuntimeException(e);
         }
-    }
-
-    public OperatorType getOperatorType()
-    {
-        return operatorType;
     }
 
     @Override

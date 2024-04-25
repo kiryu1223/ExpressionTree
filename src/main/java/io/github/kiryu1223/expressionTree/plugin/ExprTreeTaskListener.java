@@ -6,12 +6,14 @@ import com.sun.source.tree.LambdaExpressionTree;
 import com.sun.source.tree.Tree;
 import com.sun.source.util.TaskEvent;
 import com.sun.source.util.TaskListener;
+import com.sun.tools.javac.code.Flags;
 import com.sun.tools.javac.code.Type;
 import com.sun.tools.javac.code.TypeTag;
 import com.sun.tools.javac.code.Types;
 import com.sun.tools.javac.tree.JCTree;
 import com.sun.tools.javac.tree.TreeMaker;
 import com.sun.tools.javac.tree.TreeScanner;
+import com.sun.tools.javac.tree.TreeTranslator;
 import com.sun.tools.javac.util.Context;
 import com.sun.tools.javac.util.ListBuffer;
 import com.sun.tools.javac.util.Names;
@@ -141,128 +143,13 @@ public class ExprTreeTaskListener implements TaskListener
         //System.out.printf("%s 结束 %n", event.getKind());
         try
         {
+            blockTaskMake(event);
             lambdaToTree(event);
-//            codeReplace(event);
-//            typeReplace(event);
         }
         catch (Throwable e)
         {
             e.printStackTrace();
         }
-    }
-
-    private void codeReplace(TaskEvent event)
-    {
-        if (event.getKind() != TaskEvent.Kind.PARSE) return;
-        String filename = event.getSourceFile().getName();
-        needToChangeClasses.put(filename, new HashMap<>());
-
-        CompilationUnitTree compUnit = event.getCompilationUnit();
-        List<ImportInfo> imports = new ArrayList<>(compUnit.getImports().size());
-        for (ImportTree anImport : compUnit.getImports())
-        {
-            imports.add(new ImportInfo(anImport.getQualifiedIdentifier().toString(), anImport.isStatic()));
-        }
-        for (Tree typeDecl : compUnit.getTypeDecls())
-        {
-            if (!(typeDecl instanceof JCTree.JCClassDecl)) continue;
-            JCTree.JCClassDecl classDecl = (JCTree.JCClassDecl) typeDecl;
-            Map<String, JCTree.JCVariableDecl> classFields = new HashMap<>();
-            for (JCTree member : classDecl.getMembers())
-            {
-                if (member.getKind() != Tree.Kind.VARIABLE) continue;
-                JCTree.JCVariableDecl field = (JCTree.JCVariableDecl) member;
-                classFields.put(field.getName().toString(), field);
-            }
-            ExprTranslator exprTranslator = new ExprTranslator(
-                    imports,
-                    treeMaker,
-                    types, names,
-                    classFields, needToChangeClasses.get(filename), methods,
-                    operators
-            );
-            classDecl.accept(exprTranslator);
-            needToChangeRef.put(filename, exprTranslator.getNeedToChangeRef());
-        }
-    }
-
-    private void typeReplace(TaskEvent event)
-    {
-        if (event.getKind() != TaskEvent.Kind.ANALYZE) return;
-        String filename = event.getSourceFile().getName();
-        if (needToChangeClasses.containsKey(filename))
-        {
-            Map<JCTree.JCFieldAccess, JCTree> FieldMap = needToChangeClasses.get(filename);
-            FieldMap.forEach((k, v) ->
-            {
-                AtomicReference<Type> type = new AtomicReference<>();
-                if (isAnonymousClass(v))
-                {
-                    JCTree.JCClassDecl classDecl = (JCTree.JCClassDecl) v;
-                    type.set(classDecl.getExtendsClause().type);
-                }
-                else if (v.getKind() == Tree.Kind.LAMBDA_EXPRESSION)
-                {
-                    JCTree.JCLambda lambda = (JCTree.JCLambda) v;
-                    if (lambda.getBodyKind() == LambdaExpressionTree.BodyKind.EXPRESSION)
-                    {
-                        if (lambda.getBody() instanceof JCTree.JCNewClass && isAnonymousClass(((JCTree.JCNewClass) lambda.getBody()).getClassBody()))
-                        {
-                            JCTree.JCNewClass body = (JCTree.JCNewClass) lambda.getBody();
-                            type.set(body.getIdentifier().type);
-                        }
-                        else
-                        {
-                            type.set(lambda.getBody().type);
-                        }
-                    }
-                    else
-                    {
-                        lambda.getBody().accept(new TreeScanner()
-                        {
-                            @Override
-                            public void visitReturn(JCTree.JCReturn jcReturn)
-                            {
-                                type.set(jcReturn.getExpression().type);
-                                super.visitReturn(jcReturn);
-                            }
-                        });
-                    }
-                }
-                else
-                {
-                    type.set(v.type);
-                }
-                if (type.get() != null)
-                {
-                    k.selected.setType(type.get());
-                }
-            });
-            FieldMap.clear();
-        }
-        if (needToChangeRef.containsKey(filename))
-        {
-            List<JCTree.JCMethodInvocation> methodInvocations = needToChangeRef.get(filename);
-            for (JCTree.JCMethodInvocation methodInvocation : methodInvocations)
-            {
-                com.sun.tools.javac.util.List<JCTree.JCExpression> arguments = methodInvocation.getArguments();
-                JCTree.JCIdent ident = (JCTree.JCIdent) arguments.get(0);
-                if (ident.type.isPrimitive())
-                {
-                    ListBuffer<JCTree.JCExpression> args = new ListBuffer<>();
-                    args.append(arguments.get(0));
-                    args.append(arguments.get(1));
-                    args.append(treeMaker.Literal(true));
-                    methodInvocation.args = args.toList();
-                }
-            }
-            methodInvocations.clear();
-        }
-    }
-
-    private boolean isAnonymousClass(JCTree tree)
-    {
-        return tree instanceof JCTree.JCClassDecl && ((JCTree.JCClassDecl) tree).getSimpleName().isEmpty();
     }
 
     private void lambdaToTree(TaskEvent event)
@@ -282,6 +169,38 @@ public class ExprTreeTaskListener implements TaskListener
             classDecl.accept(JDK.is9orLater()
                     ? new SugarScanner(thiz, context, moduleSymbol)
                     : new SugarScanner(thiz, context));
+        }
+    }
+
+    private void blockTaskMake(TaskEvent event)
+    {
+        if (event.getKind() != TaskEvent.Kind.PARSE) return;
+        JCTree.JCCompilationUnit compilationUnit = (JCTree.JCCompilationUnit) event.getCompilationUnit();
+        for (JCTree tree : compilationUnit.getTypeDecls())
+        {
+            if (!(tree instanceof JCTree.JCClassDecl)) continue;
+            JCTree.JCClassDecl classDecl = (JCTree.JCClassDecl) tree;
+            classDecl.accept(new TreeScanner()
+            {
+                @Override
+                public void visitBlock(JCTree.JCBlock block)
+                {
+                    if (block.isStatic())
+                    {
+                        treeMaker.at(block.pos);
+                        JCTree.JCVariableDecl variableDecl = treeMaker.VarDef(
+                                treeMaker.Modifiers(0),
+                                names.fromString("taskMake"),
+                                treeMaker.TypeIdent(TypeTag.INT),
+                                null
+                        );
+                        ListBuffer<JCTree.JCStatement> expressions = new ListBuffer<>();
+                        expressions.add(variableDecl);
+                        expressions.addAll(block.getStatements());
+                        block.stats = expressions.toList();
+                    }
+                }
+            });
         }
     }
 }

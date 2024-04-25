@@ -57,14 +57,6 @@ public enum OperatorType
     MUL_ASG("*="),                        // *=
     DIV_ASG("/="),                        // /=
     MOD_ASG("%="),                        // %=
-
-    /**
-     * ----------------------------------------
-     */
-    POW(""),
-    CONTAINS(""),
-    STARTSWITH(""),
-    ENDSWITH(""),
     ;
 
     private final String operator;

@@ -2,7 +2,6 @@ package io.github.kiryu1223.expressionTree.plugin;
 
 import com.sun.source.tree.Tree;
 import com.sun.source.tree.VariableTree;
-import com.sun.source.util.SimpleTreeVisitor;
 import com.sun.tools.javac.code.*;
 import com.sun.tools.javac.main.JavaCompiler;
 import com.sun.tools.javac.tree.JCTree;
@@ -13,20 +12,13 @@ import com.sun.tools.javac.util.*;
 import com.sun.tools.javac.util.List;
 import io.github.kiryu1223.expressionTree.delegate.Delegate;
 import io.github.kiryu1223.expressionTree.expressions.*;
-import io.github.kiryu1223.expressionTree.make.IsOpMethod;
 import io.github.kiryu1223.expressionTree.util.JDK;
 import io.github.kiryu1223.expressionTree.util.ReflectUtil;
 
 import javax.lang.model.element.ElementKind;
+import javax.lang.model.type.TypeKind;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.math.BigDecimal;
-import java.math.BigInteger;
-import java.sql.Blob;
-import java.sql.Clob;
-import java.sql.Time;
-import java.sql.Timestamp;
-import java.time.Instant;
 import java.util.*;
 
 import static io.github.kiryu1223.expressionTree.expressions.Kind.*;
@@ -74,11 +66,43 @@ public class SugarScanner extends TreeScanner
         methodDecl.body.stats = jcStatements.toList();
     }
 
+    @Override
+    public void visitBlock(JCTree.JCBlock block)
+    {
+        if (block.isStatic() && hasTaskMake(block))
+        {
+            treeMaker.at(block.pos);
+            index = 0;
+            List<JCTree.JCStatement> statements = block.getStatements();
+            JCTree.JCVariableDecl variableDecl = (JCTree.JCVariableDecl) statements.get(0);
+            Symbol owner = variableDecl.sym.location();
+            ListBuffer<JCTree.JCStatement> jcStatements = new ListBuffer<>();
+            for (JCTree.JCStatement statement : statements)
+            {
+                statement.accept(new SugarTranslator(jcStatements, owner));
+                jcStatements.append(statement);
+            }
+            block.stats = jcStatements.toList();
+        }
+    }
+
+    private boolean hasTaskMake(JCTree.JCBlock block)
+    {
+        List<JCTree.JCStatement> statements = block.getStatements();
+        if (statements.isEmpty()) return false;
+        JCTree.JCStatement jcStatement = statements.get(0);
+        if (!(jcStatement instanceof JCTree.JCVariableDecl)) return false;
+        JCTree.JCVariableDecl variableDecl = (JCTree.JCVariableDecl) jcStatement;
+        return variableDecl.getName().toString().equals("taskMake")
+                || (variableDecl.getType() instanceof JCTree.JCPrimitiveTypeTree
+                && ((JCTree.JCPrimitiveTypeTree) variableDecl.getType()).getPrimitiveTypeKind() == TypeKind.INT);
+    }
+
     // todo:将来加入严格检查，现在开摆
     private boolean checkExprAnno(Symbol.MethodSymbol symbol, int index)
     {
         Symbol.VarSymbol varSymbol = symbol.getParameters().get(index);
-        return types.isFunctionalInterface(varSymbol.asType()) || varSymbol.getAnnotation(Expr.class) != null;
+        return varSymbol.getAnnotation(Expr.class) != null;
     }
 
     private Symbol.MethodSymbol getMethodSymbol(Class<?> clazz, String methodName, java.util.List<Class<?>> args)
@@ -117,36 +141,47 @@ public class SugarScanner extends TreeScanner
         throw new RuntimeException(String.format("getMethodSymbol方法无法获取到函数\n 目标类为:%s\n 函数名为:%s\n 参数类型为:%s\n", clazz, methodName, args));
     }
 
-    private Symbol.MethodSymbol getMethodSymbol(Symbol classSymbol, Name methodName, List<JCTree.JCExpression> args)
+    private Symbol.MethodSymbol getMethodSymbol(Symbol classSymbol, Name methodName, Type.MethodType methodType)
     {
-        ListBuffer<Type> argTypes = new ListBuffer<>();
-        for (JCTree.JCExpression as : args)
-        {
-            argTypes.append(types.erasure(as.type));
-        }
         for (Symbol enclosedElement : classSymbol.getEnclosedElements())
         {
             if (!(enclosedElement instanceof Symbol.MethodSymbol)) continue;
             Symbol.MethodSymbol methodSymbol = (Symbol.MethodSymbol) enclosedElement;
             if (!methodSymbol.getSimpleName().equals(methodName)) continue;
-            if (methodSymbol.getParameters().size() != argTypes.size()) continue;
-            List<Symbol.VarSymbol> parameters = methodSymbol.getParameters();
-            ListBuffer<Type> vars = new ListBuffer<>();
-            for (Symbol.VarSymbol parameter : parameters)
+            Type methodSymbolType = methodSymbol.asType();
+            List<Type> parameterTypes1 = methodSymbolType.getParameterTypes();
+            List<Type> parameterTypes2 = methodType.getParameterTypes();
+            if (types.isSubtypes(parameterTypes2, types.erasure(parameterTypes1)))
             {
-                Type type = parameter.asType();
-//                if (type instanceof Type.TypeVar)
-//                {
-//                    Type.TypeVar typeVar = (Type.TypeVar) type;
-//                    Type upperBound = typeVar.getUpperBound();
-//                    type = upperBound != null ? upperBound : symtab.objectType;
-//                }
-                vars.append(types.erasure(type));
+                return methodSymbol;
             }
-            if (!types.isSubtypes(argTypes.toList(), vars.toList())) continue;
-            return methodSymbol;
         }
-        throw new RuntimeException(String.format("getMethodSymbol方法无法获取到函数\n 目标类为:%s\n 函数名为:%s\n 参数类型为:%s\n", classSymbol, methodName, args));
+
+        throw new RuntimeException(String.format("getMethodSymbol方法无法获取到函数\n 目标类为:%s\n 函数名为:%s\n 方法类型:%s\n", classSymbol, methodName, methodType));
+    }
+
+    private Symbol.MethodSymbol getMethodSymbol(Symbol classSymbol, Name methodName, java.util.List<JCTree.JCExpression> args)
+    {
+        ListBuffer<Type> argTypes = new ListBuffer<>();
+        for (JCTree.JCExpression expression : args)
+        {
+            argTypes.append(expression.type);
+        }
+        List<Type> typeList = argTypes.toList();
+        for (Symbol enclosedElement : classSymbol.getEnclosedElements())
+        {
+            if (!(enclosedElement instanceof Symbol.MethodSymbol)) continue;
+            Symbol.MethodSymbol methodSymbol = (Symbol.MethodSymbol) enclosedElement;
+            if (!methodSymbol.getSimpleName().equals(methodName)) continue;
+            Type methodSymbolType = methodSymbol.asType();
+            List<Type> parameterTypes = methodSymbolType.getParameterTypes();
+            if (types.isSubtypes(typeList, types.erasure(parameterTypes)))
+            {
+                return methodSymbol;
+            }
+        }
+
+        throw new RuntimeException(String.format("getMethodSymbol方法无法获取到函数\n 目标类为:%s\n 函数名为:%s\n 方法类型:%s\n", classSymbol, methodName, args));
     }
 
     private Symbol.ClassSymbol getClassSymbol(Class<?> clazz)
@@ -386,8 +421,8 @@ public class SugarScanner extends TreeScanner
                     result = treeMaker.App(
                             methodSelect instanceof JCTree.JCFieldAccess
                                     ? refMakeSelector(((JCTree.JCFieldAccess) methodSelect).getExpression(), methodSymbol)
-                                    : treeMaker.Ident(methodSymbol)
-                            , args.toList());
+                                    : treeMaker.Ident(methodSymbol),
+                            args.toList());
                 }
             }
         }
@@ -543,14 +578,14 @@ public class SugarScanner extends TreeScanner
                     Symbol.MethodSymbol methodSymbol = getMethodSymbol(
                             symbol,
                             names.fromString(select.getName().toString()),
-                            jcMethodInvocation.getArguments()
+                            methodSelect.type.asMethodType()
                     );
                     if (methodSymbol.isStatic())
                     {
                         of.append(
                                 treeMaker.App(
                                         getFactoryMethod(StaticClass, Collections.singletonList(Class.class)),
-                                        List.of(treeMaker.ClassLiteral(select.type))
+                                        List.of(treeMaker.ClassLiteral(symbol.asType()))
                                 )
                         );
                     }
@@ -584,161 +619,7 @@ public class SugarScanner extends TreeScanner
                                 ))
                         .append(makeArray(Expression.class, args.toList()));
 
-                Symbol.MethodSymbol methodSymbol = getMethodSymbol(
-                        symbol,
-                        names.fromString(methodName),
-                        jcMethodInvocation.getArguments()
-                );
-
                 Type type = symbol.asType();
-                //是否为运算方法
-                IsOpMethod isOp = methodSymbol.getAnnotation(IsOpMethod.class);
-                if (isOp != null)
-                {
-                    argTypes.add(OperatorType.class);
-                    of.append(getOperator(isOp.value()));
-                }
-                else if (methodName.equals("equals")
-                        && methodType.getParameterTypes().size() == 1
-                        && methodType.getParameterTypes().get(0).equals(getType(Object.class)))
-                {
-                    argTypes.add(OperatorType.class);
-                    of.append(getOperator(OperatorType.EQ));
-                }
-                else
-                {
-                    if (type.equals(getType(String.class)))
-                    {
-                        if (methodName.equals("contains"))
-                        {
-                            argTypes.add(OperatorType.class);
-                            of.append(getOperator(OperatorType.CONTAINS));
-                        }
-                        else if (methodName.equals("startsWith"))
-                        {
-                            argTypes.add(OperatorType.class);
-                            of.append(getOperator(OperatorType.STARTSWITH));
-                        }
-                        else if (methodName.equals("endsWith"))
-                        {
-                            argTypes.add(OperatorType.class);
-                            of.append(getOperator(OperatorType.ENDSWITH));
-                        }
-                    }
-                    else if (type.equals(getType(BigDecimal.class)))
-                    {
-                        if (methodName.equals("add"))
-                        {
-                            argTypes.add(OperatorType.class);
-                            of.append(getOperator(JCTree.Tag.PLUS));
-                        }
-                        else if (methodName.equals("subtract"))
-                        {
-                            argTypes.add(OperatorType.class);
-                            of.append(getOperator(JCTree.Tag.MINUS));
-                        }
-                        else if (methodName.equals("multiply"))
-                        {
-                            argTypes.add(OperatorType.class);
-                            of.append(getOperator(JCTree.Tag.MUL));
-                        }
-                        else if (methodName.equals("divide"))
-                        {
-                            argTypes.add(OperatorType.class);
-                            of.append(getOperator(JCTree.Tag.DIV));
-                        }
-                        else if (methodName.equals("remainder"))
-                        {
-                            argTypes.add(OperatorType.class);
-                            of.append(getOperator(JCTree.Tag.MOD));
-                        }
-                        else if (methodName.equals("pow"))
-                        {
-                            argTypes.add(OperatorType.class);
-                            of.append(getOperator(OperatorType.POW));
-                        }
-                    }
-                    else if (type.equals(getType(BigInteger.class)))
-                    {
-                        if (methodName.equals("add"))
-                        {
-                            argTypes.add(OperatorType.class);
-                            of.append(getOperator(JCTree.Tag.PLUS));
-                        }
-                        else if (methodName.equals("subtract"))
-                        {
-                            argTypes.add(OperatorType.class);
-                            of.append(getOperator(JCTree.Tag.MINUS));
-                        }
-                        else if (methodName.equals("multiply"))
-                        {
-                            argTypes.add(OperatorType.class);
-                            of.append(getOperator(JCTree.Tag.MUL));
-                        }
-                        else if (methodName.equals("divide"))
-                        {
-                            argTypes.add(OperatorType.class);
-                            of.append(getOperator(JCTree.Tag.DIV));
-                        }
-                        else if (methodName.equals("remainder"))
-                        {
-                            argTypes.add(OperatorType.class);
-                            of.append(getOperator(JCTree.Tag.MOD));
-                        }
-                        else if (methodName.equals("pow"))
-                        {
-                            argTypes.add(OperatorType.class);
-                            of.append(getOperator(OperatorType.POW));
-                        }
-                    }
-                    else if (type.equals(getType(Timestamp.class)))
-                    {
-                        if (methodName.equals("after"))
-                        {
-                            argTypes.add(OperatorType.class);
-                            of.append(getOperator(JCTree.Tag.GT));
-                        }
-                        else if (methodName.equals("before"))
-                        {
-                            argTypes.add(OperatorType.class);
-                            of.append(getOperator(JCTree.Tag.LT));
-                        }
-                    }
-                    else if (type.equals(getType(java.sql.Date.class)))
-                    {
-                        if (methodName.equals("after"))
-                        {
-                            argTypes.add(OperatorType.class);
-                            of.append(getOperator(JCTree.Tag.GT));
-                        }
-                        else if (methodName.equals("before"))
-                        {
-                            argTypes.add(OperatorType.class);
-                            of.append(getOperator(JCTree.Tag.LT));
-                        }
-                    }
-                    else if (type.equals(getType(java.sql.Time.class)))
-                    {
-                        if (methodName.equals("after"))
-                        {
-                            argTypes.add(OperatorType.class);
-                            of.append(getOperator(JCTree.Tag.GT));
-                        }
-                        else if (methodName.equals("before"))
-                        {
-                            argTypes.add(OperatorType.class);
-                            of.append(getOperator(JCTree.Tag.LT));
-                        }
-                    }
-                    else if (types.isSubtype(type, getType(Collection.class)))
-                    {
-                        if (methodName.equals("contains"))
-                        {
-                            argTypes.add(OperatorType.class);
-                            of.append(getOperator(OperatorType.CONTAINS));
-                        }
-                    }
-                }
 
                 // todo：是否为扩展方法
 
