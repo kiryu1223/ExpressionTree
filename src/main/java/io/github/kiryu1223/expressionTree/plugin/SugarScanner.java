@@ -748,8 +748,10 @@ public class SugarScanner extends TreeScanner
                 JCTree.JCNewClass jcNewClass = (JCTree.JCNewClass) tree;
                 java.util.List<Class<?>> classes = new ArrayList<>(4);
                 ListBuffer<JCTree.JCExpression> all = new ListBuffer<>();
+
+                //class
                 classes.add(Class.class);
-                all.append(treeMaker.ClassLiteral(jcNewClass.getIdentifier().type));
+                all.append(treeMaker.ClassLiteral(jcNewClass.type));
 
                 //typeArg
                 ListBuffer<JCTree.JCExpression> typeArgs = new ListBuffer<>();
@@ -774,16 +776,17 @@ public class SugarScanner extends TreeScanner
                 all.append(makeArray(Expression.class, args.toList()));
 
                 //body
-                ListBuffer<JCTree.JCExpression> body = new ListBuffer<>();
                 JCTree.JCClassDecl classBody = jcNewClass.getClassBody();
                 classes.add(BlockExpression.class);
                 if (classBody != null)
                 {
-                    //todo:目前只有初始化代码块可以被记录
+                    ListBuffer<JCTree.JCExpression> body = new ListBuffer<>();
+                    //todo:目前只记录字段定义
                     for (JCTree member : classBody.getMembers())
                     {
-                        if (member.getKind() != Tree.Kind.BLOCK) continue;
-                        body.append(deepMake(member));
+                        if (member.getKind() != Tree.Kind.VARIABLE) continue;
+                        JCTree.JCExpression variable = deepMake(member);
+                        body.add(variable);
                     }
                     all.append(treeMaker.App(
                             getFactoryMethod(Block, Collections.singletonList(Expression[].class)),

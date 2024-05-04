@@ -47,7 +47,11 @@ public class NewExpression extends Expression
     public String toString()
     {
         StringBuilder sb = new StringBuilder();
-        sb.append("new ").append(type.getSimpleName()).append("(");
+        sb.append("new ")
+                .append(type.isAnonymousClass() ?
+                        type.getSuperclass().getSimpleName() :
+                        type.getSimpleName())
+                .append("(");
         for (Expression constructorArg : constructorArgs)
         {
             sb.append(constructorArg).append(",");
@@ -57,7 +61,7 @@ public class NewExpression extends Expression
             sb.deleteCharAt(sb.length() - 1);
         }
         sb.append(")");
-        if(classBody!=null)
+        if (classBody != null)
         {
             sb.append(classBody);
         }
