@@ -456,17 +456,15 @@ public class SugarScanner extends TreeScanner
             if (returnType instanceof Type.ClassType)
             {
                 Type.ClassType classType = (Type.ClassType) returnType;
-                type = classType.asElement().isAnonymous()
-                        ? classType.supertype_field : classType;
+                type = classType.asElement().isAnonymous() ?
+                        classType.supertype_field :
+                        classType;
             }
             else
             {
                 type = returnType;
             }
-//            JCTree.JCTypeApply typeApply = treeMaker.TypeApply(
-//                    treeMaker.Ident(getClassSymbol(LambdaExpression.class)),
-//                    List.of(treeMaker.Ident(gt.asElement()))
-//            );
+
             Type.ClassType classType = new Type.ClassType(
                     Type.noType,
                     List.of(gt),
@@ -1075,9 +1073,10 @@ public class SugarScanner extends TreeScanner
                     localLambdaExpr = getLocalLambdaExpr(
                             body,
                             args,
-                            returnType.asElement().isAnonymous()
-                                    ? ((Type.ClassType) returnType).getEnclosingType()
-                                    : returnType,
+//                            returnType.asElement().isAnonymous()
+//                                    ? ((Type.ClassType) returnType).getEnclosingType()
+//                                    : returnType,
+                            returnType,
                             lambda.type
                     );
                     jcStatements.append(localLambdaExpr);
