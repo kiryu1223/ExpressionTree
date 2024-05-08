@@ -452,18 +452,19 @@ public class SugarScanner extends TreeScanner
 
         private JCTree.JCVariableDecl getLocalLambdaExpr(JCTree.JCExpression body, ListBuffer<JCTree.JCExpression> args, Type returnType, Type gt)
         {
-            Type type;
-            if (returnType instanceof Type.ClassType)
-            {
-                Type.ClassType classType = (Type.ClassType) returnType;
-                type = classType.asElement().isAnonymous() ?
-                        classType.supertype_field :
-                        classType;
-            }
-            else
-            {
-                type = returnType;
-            }
+            Type type = returnType;
+
+//            if (returnType instanceof Type.ClassType)
+//            {
+//                Type.ClassType classType = (Type.ClassType) returnType;
+//                type = classType.asElement().isAnonymous() ?
+//                        classType.supertype_field :
+//                        classType;
+//            }
+//            else
+//            {
+//                type = returnType;
+//            }
 
             Type.ClassType classType = new Type.ClassType(
                     Type.noType,
@@ -1070,12 +1071,11 @@ public class SugarScanner extends TreeScanner
                         jcStatements.append(localVar);
                     }
                     JCTree.JCExpression body = deepMake(lambda.getBody());
+//                    System.out.println(lambda.type);
+//                    System.out.println(returnType);
                     localLambdaExpr = getLocalLambdaExpr(
                             body,
                             args,
-//                            returnType.asElement().isAnonymous()
-//                                    ? ((Type.ClassType) returnType).getEnclosingType()
-//                                    : returnType,
                             returnType,
                             lambda.type
                     );
