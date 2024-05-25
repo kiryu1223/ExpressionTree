@@ -23,7 +23,7 @@ public class StaticClassExpression extends Expression
     @Override
     public String toString()
     {
-        return type.getSimpleName();
+        return type.getSimpleName() + ".class";
     }
 
     @Override

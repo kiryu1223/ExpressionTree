@@ -495,7 +495,15 @@ public class SugarScanner extends TreeScanner
 
         private JCTree.JCExpression deepMake(JCTree tree)
         {
-            if (tree instanceof JCTree.JCLiteral)
+            if (tree instanceof JCTree.JCPrimitiveTypeTree)
+            {
+                JCTree.JCPrimitiveTypeTree jcPrimitiveTypeTree = (JCTree.JCPrimitiveTypeTree) tree;
+                return treeMaker.App(
+                        getFactoryMethod(StaticClass, Collections.singletonList(Class.class)),
+                        List.of(treeMaker.ClassLiteral(jcPrimitiveTypeTree.type))
+                );
+            }
+            else if (tree instanceof JCTree.JCLiteral)
             {
                 JCTree.JCLiteral jcLiteral = (JCTree.JCLiteral) tree;
                 return treeMaker.App(getFactoryMethod(Constant, Collections.singletonList(Object.class)), List.of(jcLiteral));
@@ -634,11 +642,13 @@ public class SugarScanner extends TreeScanner
             else if (tree instanceof JCTree.JCFieldAccess)
             {
                 JCTree.JCFieldAccess jcFieldAccess = (JCTree.JCFieldAccess) tree;
-                if (jcFieldAccess.sym.getKind() == ElementKind.CLASS)
+                if (jcFieldAccess.sym.getKind() == ElementKind.FIELD
+                        // class是关键字不能作为字段和函数名，可以直接判断
+                        && jcFieldAccess.getIdentifier().toString().equals("class"))
                 {
                     return treeMaker.App(
                             getFactoryMethod(StaticClass, Collections.singletonList(Class.class)),
-                            List.of(treeMaker.ClassLiteral(jcFieldAccess.type))
+                            List.of(treeMaker.ClassLiteral(jcFieldAccess.getExpression().type))
                     );
                 }
                 else
@@ -783,8 +793,9 @@ public class SugarScanner extends TreeScanner
                     //todo:目前只记录字段定义
                     for (JCTree member : classBody.getMembers())
                     {
-                        if (member.getKind() != Tree.Kind.VARIABLE) continue;
-                        JCTree.JCExpression variable = deepMake(member);
+                        if (!(member instanceof JCTree.JCVariableDecl)) continue;
+                        JCTree.JCVariableDecl variableDecl = (JCTree.JCVariableDecl) member;
+                        JCTree.JCExpression variable = deepMake(variableDecl);
                         body.add(variable);
                     }
                     all.append(treeMaker.App(

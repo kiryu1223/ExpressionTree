@@ -1,8 +1,6 @@
 package io.github.kiryu1223.expressionTree.expressions;
 
 import io.github.kiryu1223.expressionTree.delegate.Delegate;
-import io.github.kiryu1223.expressionTree.dynamic.DynamicCompilerUtil;
-import io.github.kiryu1223.expressionTree.dynamic.DynamicMethod;
 
 import java.util.List;
 
@@ -68,8 +66,8 @@ public class LambdaExpression<T extends Delegate> extends Expression
                 && returnType.equals(that.returnType);
     }
 
-    public T compile()
-    {
-        return DynamicCompilerUtil.dynamicCompile(this);
-    }
+//    public T compile()
+//    {
+//        return DynamicCompilerUtil.dynamicCompile(this);
+//    }
 }

@@ -6,7 +6,7 @@
 
     <groupId>io.github.kiryu1223</groupId>
     <artifactId>ExpressionTree</artifactId>
-    <version>1.2.6</version>
+    <version>1.2.7</version>
 
     <name>ExpressionTree</name>
     <description>java static expressionTree</description>
@@ -44,20 +44,6 @@
         <maven.compiler.target>8</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
-
-    <dependencies>
-        <dependency>
-            <groupId>net.openhft</groupId>
-            <artifactId>compiler</artifactId>
-            <version>2.25ea1</version>
-            <exclusions>
-                <exclusion>
-                    <groupId>org.slf4j</groupId>
-                    <artifactId>slf4j-api</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-    </dependencies>
 
     <profiles>
         <profile>

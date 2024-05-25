@@ -1,32 +1,24 @@
 package io.github.kiryu1223.expressionTree.plugin;
 
-import com.sun.source.tree.CompilationUnitTree;
-import com.sun.source.tree.ImportTree;
-import com.sun.source.tree.LambdaExpressionTree;
-import com.sun.source.tree.Tree;
 import com.sun.source.util.TaskEvent;
 import com.sun.source.util.TaskListener;
-import com.sun.tools.javac.code.Flags;
-import com.sun.tools.javac.code.Type;
-import com.sun.tools.javac.code.TypeTag;
-import com.sun.tools.javac.code.Types;
+import com.sun.tools.javac.code.*;
 import com.sun.tools.javac.tree.JCTree;
 import com.sun.tools.javac.tree.TreeMaker;
 import com.sun.tools.javac.tree.TreeScanner;
-import com.sun.tools.javac.tree.TreeTranslator;
 import com.sun.tools.javac.util.Context;
 import com.sun.tools.javac.util.ListBuffer;
 import com.sun.tools.javac.util.Names;
 import io.github.kiryu1223.expressionTree.expressions.Expression;
 import io.github.kiryu1223.expressionTree.expressions.Kind;
 import io.github.kiryu1223.expressionTree.expressions.OperatorType;
+import io.github.kiryu1223.expressionTree.expressions.annos.Getter;
+import io.github.kiryu1223.expressionTree.expressions.annos.Setter;
 import io.github.kiryu1223.expressionTree.util.JDK;
 import io.github.kiryu1223.expressionTree.util.ReflectUtil;
 
-import javax.lang.model.element.TypeElement;
-import java.lang.reflect.InvocationTargetException;
 import java.util.*;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 
 public class ExprTreeTaskListener implements TaskListener
 {
@@ -45,7 +37,7 @@ public class ExprTreeTaskListener implements TaskListener
         types = Types.instance(context);
         names = Names.instance(context);
         this.context = context;
-        init();
+        //init();
     }
 
     public void init()
@@ -143,6 +135,7 @@ public class ExprTreeTaskListener implements TaskListener
         //System.out.printf("%s 结束 %n", event.getKind());
         try
         {
+            getterOrSetter(event);
             blockTaskMake(event);
             lambdaToTree(event);
         }
@@ -169,6 +162,106 @@ public class ExprTreeTaskListener implements TaskListener
             classDecl.accept(JDK.is9orLater()
                     ? new SugarScanner(thiz, context, moduleSymbol)
                     : new SugarScanner(thiz, context));
+//            Symtab symtab = Symtab.instance(context);
+//            classDecl.accept(new TreeTranslator()
+//            {
+//                @Override
+//                public void visitNewClass(JCTree.JCNewClass newClass)
+//                {
+//                    if (newClass.getClassBody() != null)
+//                    {
+//                        treeMaker.at(newClass.pos);
+//                        JCTree.JCClassDecl classBody = newClass.getClassBody();
+//                        Getter getter = newClass.getIdentifier().type.tsym.getAnnotation(Getter.class);
+//                        if (getter != null)
+//                        {
+//                            Symbol.ClassSymbol curOwner = classBody.sym;
+//                            ListBuffer<JCTree> treeData = new ListBuffer<>();
+//                            ListBuffer<JCTree.JCVariableDecl> variableDecls = new ListBuffer<>();
+//                            JCTree.JCMethodDecl check = null;
+//                            for (JCTree member : classBody.getMembers())
+//                            {
+//                                treeData.append(member);
+//                                if (member instanceof JCTree.JCVariableDecl)
+//                                {
+//                                    variableDecls.append(((JCTree.JCVariableDecl) member));
+//                                }
+//                                else if (member instanceof JCTree.JCMethodDecl)
+//                                {
+//                                    JCTree.JCMethodDecl jcMethodDecl = (JCTree.JCMethodDecl) member;
+//                                    if (jcMethodDecl.getName().toString().equals("getId"))
+//                                    {
+//                                        jcMethodDecl.name = names.fromString("getIds");
+//                                    }
+//                                }
+//                            }
+//                            System.out.println(newClass);
+//                            result = newClass;
+////                            for (JCTree.JCVariableDecl variableDecl : variableDecls)
+////                            {
+////                                String name = variableDecl.getName().toString();
+////                                Symbol.MethodSymbol methodSymbol = new Symbol.MethodSymbol(
+////                                        Flags.PUBLIC,
+////                                        names.fromString("get" + name.substring(0, 1).toUpperCase() + name.substring(1)),
+////                                        new Type.MethodType(
+////                                                com.sun.tools.javac.util.List.nil(),
+////                                                variableDecl.getType().type,
+////                                                com.sun.tools.javac.util.List.nil(),
+////                                                symtab.methodClass
+////                                        ),
+////                                        curOwner
+////                                );
+////                                JCTree.JCMethodDecl getterMethod = treeMaker.MethodDef(
+////                                        methodSymbol,
+////                                        treeMaker.Block(
+////                                                0,
+////                                                com.sun.tools.javac.util.List.of(treeMaker.Return(treeMaker.Ident(variableDecl)))
+////                                        )
+////                                );
+////
+//////                                if (check != null)
+//////                                {
+//////                                    System.out.println(getterMethod.getName());
+//////                                    System.out.println(check.getName());
+//////                                    System.out.println(getterMethod.getName().equals(check.getName()));
+//////                                    System.out.println();
+//////                                    System.out.println(getterMethod.getBody());
+//////                                    System.out.println(check.getBody());
+//////                                    System.out.println(getterMethod.getBody().equals(check.getBody()));
+//////                                    System.out.println();
+//////                                    System.out.println(getterMethod.getModifiers());
+//////                                    System.out.println(check.getModifiers());
+//////                                    System.out.println(getterMethod.getModifiers().flags==check.getModifiers().flags);
+//////                                    System.out.println();
+//////                                    System.out.println(getterMethod.getTag());
+//////                                    System.out.println(check.getTag());
+//////                                    System.out.println(getterMethod.getTag().equals(check.getTag()));
+//////                                }
+////
+////                                treeData.append(getterMethod);
+////                            }
+////                            JCTree.JCClassDecl anonymoused = treeMaker.AnonymousClassDef(treeMaker.Modifiers(0), treeData.toList());
+////                            anonymoused.type = classBody.type;
+////                            anonymoused.sym = classBody.sym;
+////                            JCTree.JCNewClass jcNewClass = treeMaker.NewClass(newClass.encl, newClass.typeargs, newClass.clazz, newClass.args, anonymoused);
+////                            jcNewClass.type = newClass.type;
+////                            jcNewClass.constructor = newClass.constructor;
+////                            jcNewClass.varargsElement = newClass.varargsElement;
+////                            jcNewClass.pos = newClass.pos;
+////                            super.visitNewClass(jcNewClass);
+//
+//                        }
+//                        else
+//                        {
+//                            super.visitNewClass(newClass);
+//                        }
+//                    }
+//                    else
+//                    {
+//                        super.visitNewClass(newClass);
+//                    }
+//                }
+//            });
         }
     }
 
@@ -202,5 +295,119 @@ public class ExprTreeTaskListener implements TaskListener
                 }
             });
         }
+    }
+
+    private void getterOrSetter(TaskEvent event)
+    {
+        if (event.getKind() != TaskEvent.Kind.ENTER) return;
+        JCTree.JCCompilationUnit compilationUnit = (JCTree.JCCompilationUnit) event.getCompilationUnit();
+        com.sun.tools.javac.util.List<JCTree.JCImport> imports = compilationUnit.getImports();
+        Symtab symtab = Symtab.instance(context);
+//        ListBuffer<Type> hasGetterTypes = new ListBuffer<>();
+//        ListBuffer<Type> hasSetterTypes = new ListBuffer<>();
+//        for (Symbol.ClassSymbol classSymbol : symtab.classes.values())
+//        {
+//            if (classSymbol.hasAnnotations())
+//            {
+//                Getter getter = classSymbol.getAnnotation(Getter.class);
+//                if (getter != null)
+//                {
+//                    hasGetterTypes.append(classSymbol.type);
+//                }
+//                Setter setter = classSymbol.getAnnotation(Setter.class);
+//                if (setter != null)
+//                {
+//                    hasSetterTypes.append(classSymbol.type);
+//                }
+//            }
+//        }
+        for (JCTree tree : compilationUnit.getTypeDecls())
+        {
+            if (!(tree instanceof JCTree.JCClassDecl)) continue;
+            JCTree.JCClassDecl classDecl = (JCTree.JCClassDecl) tree;
+            classDecl.accept(new TreeScanner()
+            {
+                @Override
+                public void visitNewClass(JCTree.JCNewClass newClass)
+                {
+                    if (newClass.getClassBody() != null)
+                    {
+                        JCTree.JCImport anImport = getImport(newClass.clazz.toString(), imports);
+                        if (anImport == null) return;
+                        Type type = anImport.getQualifiedIdentifier().type;
+                        if (type == null) return;
+                        Symbol.TypeSymbol tsym = type.tsym;
+                        if (tsym == null) return;
+                        JCTree.JCClassDecl classBody = newClass.getClassBody();
+                        ListBuffer<JCTree.JCVariableDecl> variableDecls = new ListBuffer<>();
+                        for (JCTree member : classBody.getMembers())
+                        {
+                            if (member instanceof JCTree.JCVariableDecl)
+                            {
+                                JCTree.JCVariableDecl jcVariableDecl = (JCTree.JCVariableDecl) member;
+                                variableDecls.add(jcVariableDecl);
+                            }
+                        }
+                        Getter getter = tsym.getAnnotation(Getter.class);
+                        if (getter != null)
+                        {
+                            treeMaker.at(newClass.pos);
+                            for (JCTree.JCVariableDecl variableDecl : variableDecls)
+                            {
+                                String name = variableDecl.getName().toString();
+                                JCTree.JCMethodDecl jcMethodDecl = treeMaker.MethodDef(
+                                        treeMaker.Modifiers(Flags.PUBLIC),
+                                        names.fromString("get" + name.substring(0, 1).toUpperCase() + name.substring(1)),
+                                        variableDecl.vartype,
+                                        com.sun.tools.javac.util.List.nil(),
+                                        com.sun.tools.javac.util.List.nil(),
+                                        com.sun.tools.javac.util.List.nil(),
+                                        treeMaker.Block(0, com.sun.tools.javac.util.List.of(treeMaker.Return(treeMaker.Ident(variableDecl.getName())))),
+                                        null
+                                );
+                                classBody.defs = classBody.defs.append(jcMethodDecl);
+                            }
+                        }
+                        Setter setter = tsym.getAnnotation(Setter.class);
+                        if (setter != null)
+                        {
+                            treeMaker.at(newClass.pos);
+                            for (JCTree.JCVariableDecl variableDecl : variableDecls)
+                            {
+                                String name = variableDecl.getName().toString();
+                                JCTree.JCMethodDecl jcMethodDecl = treeMaker.MethodDef(
+                                        treeMaker.Modifiers(Flags.PUBLIC),
+                                        names.fromString("set" + name.substring(0, 1).toUpperCase() + name.substring(1)),
+                                        treeMaker.TypeIdent(TypeTag.VOID),
+                                        com.sun.tools.javac.util.List.nil(),
+                                        com.sun.tools.javac.util.List.of(
+                                                treeMaker.VarDef(treeMaker.Modifiers(Flags.PARAMETER), variableDecl.getName(), variableDecl.vartype, null)
+                                        ),
+                                        com.sun.tools.javac.util.List.nil(),
+                                        treeMaker.Block(0, com.sun.tools.javac.util.List.of(
+                                                treeMaker.Exec(
+                                                        treeMaker.Assign(
+                                                                treeMaker.Select(treeMaker.Ident(names._this), variableDecl.getName()),
+                                                                treeMaker.Ident(variableDecl.getName())
+                                                        )
+                                                )
+                                        )),
+                                        null
+                                );
+                                System.out.println(jcMethodDecl);
+                                classBody.defs = classBody.defs.append(jcMethodDecl);
+                            }
+                        }
+                    }
+                }
+            });
+        }
+    }
+
+    private JCTree.JCImport getImport(String simpleName, List<JCTree.JCImport> imports)
+    {
+        List<JCTree.JCImport> collect = imports.stream().filter(i -> !i.isStatic() && i.getQualifiedIdentifier().toString().endsWith("." + simpleName)).collect(Collectors.toList());
+        if (collect.size() != 1) return null;
+        return collect.get(0);
     }
 }
