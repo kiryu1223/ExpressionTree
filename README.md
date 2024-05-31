@@ -30,7 +30,7 @@ jdk15后的版本(**不包括jdk15**)因为封装规则的修改，需要往项�
 <dependency>
   <groupId>io.github.kiryu1223</groupId>
   <artifactId>ExpressionTree</artifactId>
-  <version>1.2.2</version>
+  <version>1.2.7</version>
 </dependency>
 ```
 
@@ -73,7 +73,7 @@ import static io.github.kiryu1223.expressionTree.expressions.ExprTree.Expr;
 
 public class Main
 {
-    public static void main(String[] args) throws Exception
+    public static void main(String[] args)
     {
         test(s -> System.out.println(s));
     }
