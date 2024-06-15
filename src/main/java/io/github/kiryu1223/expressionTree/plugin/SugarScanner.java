@@ -58,7 +58,7 @@ public class SugarScanner extends TreeScanner
         ListBuffer<JCTree.JCStatement> jcStatements = new ListBuffer<>();
         for (JCTree.JCStatement statement : body.getStatements())
         {
-            statement.accept(new SugarTranslator(jcStatements, methodDecl.sym));
+            statement.accept(new StatementRouter(jcStatements, methodDecl.sym));
             jcStatements.append(statement);
         }
         methodDecl.body.stats = jcStatements.toList();
@@ -77,7 +77,7 @@ public class SugarScanner extends TreeScanner
             ListBuffer<JCTree.JCStatement> jcStatements = new ListBuffer<>();
             for (JCTree.JCStatement statement : statements)
             {
-                statement.accept(new SugarTranslator(jcStatements, owner));
+                statement.accept(new StatementRouter(jcStatements, owner));
                 jcStatements.append(statement);
             }
             block.stats = jcStatements.toList();
@@ -1111,5 +1111,68 @@ public class SugarScanner extends TreeScanner
             }
             throw new RuntimeException("不支持的类型:" + tree.type + "\n" + tree);
         }
+    }
+
+    private class StatementRouter extends TreeScanner
+    {
+        private final ListBuffer<JCTree.JCStatement> jcStatements;
+        private final Symbol owner;
+
+        public StatementRouter(ListBuffer<JCTree.JCStatement> jcStatements, Symbol owner)
+        {
+            this.jcStatements = jcStatements;
+            this.owner = owner;
+        }
+
+//        private void deepBlock(JCTree.JCStatement statement)
+//        {
+//            JCTree.JCBlock block = (JCTree.JCBlock) statement;
+//            ListBuffer<JCTree.JCStatement> statements = new ListBuffer<>();
+//            block.accept(new StatementRouter(statements, owner));
+//            statements.appendList(block.getStatements());
+//            block.stats = statements.toList();
+//        }
+
+        @Override
+        public void visitExec(JCTree.JCExpressionStatement tree)
+        {
+            tree.accept(new SugarTranslator(jcStatements, owner));
+        }
+
+        @Override
+        public void visitBlock(JCTree.JCBlock tree)
+        {
+            ListBuffer<JCTree.JCStatement> temps = new ListBuffer<>();
+            for (JCTree.JCStatement statement : tree.getStatements())
+            {
+                statement.accept(new StatementRouter(temps,owner));
+                temps.append(statement);
+            }
+            tree.stats = temps.toList();
+        }
+
+//        @Override
+//        public void visitIf(JCTree.JCIf tree)
+//        {
+//            scan(tree.getCondition());
+//            if (tree.getThenStatement() != null
+//                    && tree.getThenStatement().getKind() == Tree.Kind.BLOCK)
+//            {
+//                deepBlock(tree.getThenStatement());
+//            }
+//            else
+//            {
+//                scan(tree.getThenStatement());
+//            }
+//            if (tree.getElseStatement() != null
+//                    && tree.getElseStatement().getKind() == Tree.Kind.BLOCK)
+//            {
+//                deepBlock(tree.getElseStatement());
+//            }
+//            else
+//            {
+//                scan(tree.getElseStatement());
+//            }
+//        }
     }
 }
