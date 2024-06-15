@@ -196,8 +196,7 @@ public class ReflectUtil
     {
         try
         {
-            List<Class<?>> classes = values.stream().map(a -> a.getClass()).collect(Collectors.toList());
-            Method method = getMethod(o.getClass(), name, classes.toArray(new Class[0]));
+            Method method = getMethod(o.getClass(), name, values.stream().map(Object::getClass).toArray(Class[]::new));
             method.setAccessible(true);
             return (T) method.invoke(o, values.toArray());
         }

@@ -3,6 +3,7 @@ package io.github.kiryu1223.expressionTree.plugin;
 import com.sun.source.tree.Tree;
 import com.sun.source.tree.VariableTree;
 import com.sun.tools.javac.code.*;
+import com.sun.tools.javac.jvm.ClassReader;
 import com.sun.tools.javac.main.JavaCompiler;
 import com.sun.tools.javac.tree.JCTree;
 import com.sun.tools.javac.tree.TreeMaker;
@@ -32,22 +33,19 @@ public class SugarScanner extends TreeScanner
     private final JavaCompiler javaCompiler;
     private final Object moduleSymbol;
     private final Type thiz;
+    private final ClassReader classReader;
     private int index = 0;
 
-    public SugarScanner(Type thiz, Context context, Object moduleSymbol)
+    public SugarScanner(Type thiz, TreeMaker treeMaker, Types types, Names names, Symtab symtab, JavaCompiler javaCompiler, ClassReader classReader, Object moduleSymbol)
     {
         this.thiz = thiz;
-        treeMaker = TreeMaker.instance(context);
-        types = Types.instance(context);
-        names = Names.instance(context);
-        symtab = Symtab.instance(context);
-        javaCompiler = JavaCompiler.instance(context);
+        this.treeMaker = treeMaker;
+        this.types = types;
+        this.names = names;
+        this.symtab = symtab;
+        this.javaCompiler = javaCompiler;
         this.moduleSymbol = moduleSymbol;
-    }
-
-    public SugarScanner(Type thiz, Context context)
-    {
-        this(thiz, context, null);
+        this.classReader = classReader;
     }
 
     @Override
@@ -157,7 +155,7 @@ public class SugarScanner extends TreeScanner
             }
         }
 
-        throw new RuntimeException(String.format("getMethodSymbol方法无法获取到函数\n 目标类为:%s\n 函数名为:%s\n 方法类型:%s\n", classSymbol, methodName, methodType));
+        throw new RuntimeException(String.format("getMethodSymbol方法无法获取到函数\n 目标类为:%s\n 函数名为:%s\n 函数类型:%s\n", classSymbol, methodName, methodType));
     }
 
     private Symbol.MethodSymbol getMethodSymbol(Symbol classSymbol, Name methodName, java.util.List<JCTree.JCExpression> args)
@@ -168,6 +166,7 @@ public class SugarScanner extends TreeScanner
             argTypes.append(expression.type);
         }
         List<Type> typeList = argTypes.toList();
+        //System.out.println(classSymbol + " " + methodName.toString() + " " + args.toString());
         for (Symbol enclosedElement : classSymbol.getEnclosedElements())
         {
             if (!(enclosedElement instanceof Symbol.MethodSymbol)) continue;
@@ -175,13 +174,27 @@ public class SugarScanner extends TreeScanner
             if (!methodSymbol.getSimpleName().equals(methodName)) continue;
             Type methodSymbolType = methodSymbol.asType();
             List<Type> parameterTypes = methodSymbolType.getParameterTypes();
-            if (types.isSubtypes(typeList, types.erasure(parameterTypes)))
+            if (typeList.size() != parameterTypes.size()) continue;
+            boolean flag = false;
+            for (int i = 0; i < parameterTypes.size(); i++)
+            {
+                Type parameterType = types.erasure(parameterTypes.get(i));
+                Type listType = types.erasure(typeList.get(i));
+//                System.out.println(parameterType.toString());
+//                System.out.println(listType.toString());
+                if (!parameterType.toString().equals(listType.toString()))
+                {
+                    flag = true;
+                    break;
+                }
+            }
+            if (!flag)
             {
                 return methodSymbol;
             }
         }
 
-        throw new RuntimeException(String.format("getMethodSymbol方法无法获取到函数\n 目标类为:%s\n 函数名为:%s\n 方法类型:%s\n", classSymbol, methodName, args));
+        throw new RuntimeException(String.format("getMethodSymbol方法无法获取到函数\n 目标类为:%s\n 函数名为:%s\n 函数类型:%s\n", classSymbol, methodName, args));
     }
 
     private Symbol.ClassSymbol getClassSymbol(Class<?> clazz)
@@ -193,7 +206,8 @@ public class SugarScanner extends TreeScanner
             classSymbol = ReflectUtil.invokeMethod(symtab, "getClass", Arrays.asList(moduleSymbol, name));
             if (classSymbol == null)
             {
-                classSymbol = ReflectUtil.invokeMethod(javaCompiler, "resolveIdent", Arrays.asList(moduleSymbol, clazz.getName()));
+                //classSymbol = ReflectUtil.invokeMethod(javaCompiler, "resolveIdent", Arrays.asList(moduleSymbol, clazz.getName()));
+                classSymbol = classReader.enterClass(name);
             }
         }
         else
@@ -201,7 +215,7 @@ public class SugarScanner extends TreeScanner
             classSymbol = ReflectUtil.<Map<Name, Symbol.ClassSymbol>>getFieldValue(symtab, "classes").get(name);
             if (classSymbol == null)
             {
-                classSymbol = ReflectUtil.invokeMethod(javaCompiler, "resolveIdent", Collections.singletonList(clazz.getName()));
+                classSymbol = classReader.enterClass(name);
             }
         }
         return classSymbol;
