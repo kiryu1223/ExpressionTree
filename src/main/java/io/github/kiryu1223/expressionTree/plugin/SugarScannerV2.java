@@ -29,7 +29,7 @@ import static io.github.kiryu1223.expressionTree.expressions.Kind.TypeCast;
 
 public class SugarScannerV2 extends TreeScanner
 {
-    private Type thiz;
+    private Symbol thiz;
     private Symbol owner;
     private ListBuffer<JCTree.JCStatement> newStatement;
     private AtomicInteger index = new AtomicInteger(0);
@@ -55,7 +55,7 @@ public class SugarScannerV2 extends TreeScanner
         this.index = index;
     }
 
-    public void setThiz(Type thiz)
+    public void setThiz(Symbol thiz)
     {
         this.thiz = thiz;
     }
@@ -70,10 +70,27 @@ public class SugarScannerV2 extends TreeScanner
         this.newStatement = newStatement;
     }
 
+    private boolean hasTaskMake(JCTree.JCBlock block)
+    {
+        List<JCTree.JCStatement> statements = block.getStatements();
+        if (statements.isEmpty()) return false;
+        JCTree.JCStatement jcStatement = statements.get(0);
+        if (!(jcStatement instanceof JCTree.JCVariableDecl)) return false;
+        JCTree.JCVariableDecl variableDecl = (JCTree.JCVariableDecl) jcStatement;
+        return variableDecl.getName().toString().equals("taskMake")
+                || (variableDecl.getType() instanceof JCTree.JCPrimitiveTypeTree
+                && ((JCTree.JCPrimitiveTypeTree) variableDecl.getType()).getPrimitiveTypeKind() == TypeKind.INT);
+    }
+
     @Override
     public void visitClassDef(JCTree.JCClassDecl classDecl)
     {
-        thiz = classDecl.type;
+        thiz = classDecl.sym;
+//        for (JCTree member : classDecl.getMembers())
+//        {
+//            System.out.println(member.getClass());
+//            System.out.println(member);
+//        }
         super.visitClassDef(classDecl);
     }
 
@@ -82,12 +99,39 @@ public class SugarScannerV2 extends TreeScanner
     {
         owner = methodDecl.sym;
         super.visitMethodDef(methodDecl);
+        owner = null;
     }
 
     @Override
     public void visitBlock(JCTree.JCBlock block)
     {
-        if (block.isStatic()) return;
+        if (!block.isStatic())
+        {
+            if (owner != null)
+            {
+                joinBlock(block);
+            }
+            else
+            {
+                if (!hasTaskMake(block)) return;
+                JCTree.JCVariableDecl first = (JCTree.JCVariableDecl) block.getStatements().get(0);
+                owner = first.sym.location();
+                joinBlock(block);
+                owner = null;
+            }
+        }
+        else
+        {
+            if (!hasTaskMake(block)) return;
+            JCTree.JCVariableDecl first = (JCTree.JCVariableDecl) block.getStatements().get(0);
+            owner = first.sym.location();
+            joinBlock(block);
+            owner = null;
+        }
+    }
+
+    private void joinBlock(JCTree.JCBlock block)
+    {
         newStatement = new ListBuffer<>();
         for (JCTree.JCStatement statement : block.getStatements())
         {
@@ -373,7 +417,7 @@ public class SugarScannerV2 extends TreeScanner
                         of.append(
                                 treeMaker.App(
                                         getFactoryMethod(Reference, Arrays.asList(Object.class, String.class)),
-                                        List.of(treeMaker.This(thiz), treeMaker.Literal("this"))
+                                        List.of(treeMaker.This(thiz.type), treeMaker.Literal("this"))
                                 )
                         );
                     }
@@ -868,18 +912,6 @@ public class SugarScannerV2 extends TreeScanner
                 return treeMaker.Ident(localLambdaExpr);
             }
             throw new RuntimeException("不支持的类型:" + tree.type + "\n" + tree);
-        }
-
-        private boolean hasTaskMake(JCTree.JCBlock block)
-        {
-            List<JCTree.JCStatement> statements = block.getStatements();
-            if (statements.isEmpty()) return false;
-            JCTree.JCStatement jcStatement = statements.get(0);
-            if (!(jcStatement instanceof JCTree.JCVariableDecl)) return false;
-            JCTree.JCVariableDecl variableDecl = (JCTree.JCVariableDecl) jcStatement;
-            return variableDecl.getName().toString().equals("taskMake")
-                    || (variableDecl.getType() instanceof JCTree.JCPrimitiveTypeTree
-                    && ((JCTree.JCPrimitiveTypeTree) variableDecl.getType()).getPrimitiveTypeKind() == TypeKind.INT);
         }
 
         // todo:将来加入严格检查，现在开摆

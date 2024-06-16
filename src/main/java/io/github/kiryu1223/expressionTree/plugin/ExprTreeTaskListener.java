@@ -92,10 +92,14 @@ public class ExprTreeTaskListener implements TaskListener
             classDecl.accept(new TreeScanner()
             {
                 @Override
+                public void visitMethodDef(JCTree.JCMethodDecl tree)
+                {
+
+                }
+
+                @Override
                 public void visitBlock(JCTree.JCBlock block)
                 {
-                    if (block.isStatic())
-                    {
                         treeMaker.at(block.pos);
                         JCTree.JCVariableDecl variableDecl = treeMaker.VarDef(
                                 treeMaker.Modifiers(0),
@@ -107,7 +111,6 @@ public class ExprTreeTaskListener implements TaskListener
                         expressions.add(variableDecl);
                         expressions.addAll(block.getStatements());
                         block.stats = expressions.toList();
-                    }
                 }
             });
         }
