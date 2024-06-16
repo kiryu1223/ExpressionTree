@@ -36,7 +36,7 @@ public class ExprTreeTaskListener implements TaskListener
         names = Names.instance(context);
         symtab = Symtab.instance(context);
         javaCompiler = JavaCompiler.instance(context);
-        classReader= ClassReader.instance(context);
+        classReader = ClassReader.instance(context);
         //this.context = context;
     }
 
@@ -75,8 +75,9 @@ public class ExprTreeTaskListener implements TaskListener
         {
             if (!(tree instanceof JCTree.JCClassDecl)) continue;
             JCTree.JCClassDecl classDecl = (JCTree.JCClassDecl) tree;
-            Type thiz = classDecl.type;
-            classDecl.accept(new SugarScanner(thiz, treeMaker, types, names, symtab, javaCompiler,classReader, moduleSymbol));
+            //Type thiz = classDecl.type;
+            classDecl.accept(new SugarScannerV2(treeMaker, types, names, symtab, classReader, moduleSymbol));
+            //classDecl.accept(new SugarScanner(thiz, treeMaker, types, names, symtab, javaCompiler,classReader, moduleSymbol));
         }
     }
 
@@ -160,7 +161,7 @@ public class ExprTreeTaskListener implements TaskListener
                             {
                                 String name = variableDecl.getName().toString();
                                 String get = "get" + name.substring(0, 1).toUpperCase() + name.substring(1);
-                                if(methodDecls.contains(get))continue;
+                                if (methodDecls.contains(get)) continue;
                                 JCTree.JCMethodDecl jcMethodDecl = treeMaker.MethodDef(
                                         treeMaker.Modifiers(Flags.PUBLIC),
                                         names.fromString(get),
@@ -182,7 +183,7 @@ public class ExprTreeTaskListener implements TaskListener
                             {
                                 String name = variableDecl.getName().toString();
                                 String set = "set" + name.substring(0, 1).toUpperCase() + name.substring(1);
-                                if(methodDecls.contains(set))continue;
+                                if (methodDecls.contains(set)) continue;
                                 JCTree.JCMethodDecl jcMethodDecl = treeMaker.MethodDef(
                                         treeMaker.Modifiers(Flags.PUBLIC),
                                         names.fromString("set" + name.substring(0, 1).toUpperCase() + name.substring(1)),

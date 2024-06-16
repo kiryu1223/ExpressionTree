@@ -4,13 +4,14 @@ import com.sun.source.tree.Tree;
 import com.sun.source.tree.VariableTree;
 import com.sun.tools.javac.code.*;
 import com.sun.tools.javac.jvm.ClassReader;
-import com.sun.tools.javac.main.JavaCompiler;
 import com.sun.tools.javac.tree.JCTree;
 import com.sun.tools.javac.tree.TreeMaker;
 import com.sun.tools.javac.tree.TreeScanner;
 import com.sun.tools.javac.tree.TreeTranslator;
-import com.sun.tools.javac.util.*;
 import com.sun.tools.javac.util.List;
+import com.sun.tools.javac.util.ListBuffer;
+import com.sun.tools.javac.util.Name;
+import com.sun.tools.javac.util.Names;
 import io.github.kiryu1223.expressionTree.delegate.Delegate;
 import io.github.kiryu1223.expressionTree.expressions.*;
 import io.github.kiryu1223.expressionTree.util.JDK;
@@ -21,374 +22,126 @@ import javax.lang.model.type.TypeKind;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static io.github.kiryu1223.expressionTree.expressions.Kind.*;
+import static io.github.kiryu1223.expressionTree.expressions.Kind.TypeCast;
 
-public class SugarScanner extends TreeScanner
+public class SugarScannerV2 extends TreeScanner
 {
+    private Type thiz;
+    private Symbol owner;
+    private ListBuffer<JCTree.JCStatement> newStatement;
+    private AtomicInteger index = new AtomicInteger(0);
     private final TreeMaker treeMaker;
     private final Types types;
     private final Names names;
     private final Symtab symtab;
-    private final JavaCompiler javaCompiler;
-    private final Object moduleSymbol;
-    private final Type thiz;
     private final ClassReader classReader;
-    private int index = 0;
+    private final Object moduleSymbol;
 
-    public SugarScanner(Type thiz, TreeMaker treeMaker, Types types, Names names, Symtab symtab, JavaCompiler javaCompiler, ClassReader classReader, Object moduleSymbol)
+    public SugarScannerV2(TreeMaker treeMaker, Types types, Names names, Symtab symtab, ClassReader classReader, Object moduleSymbol)
     {
-        this.thiz = thiz;
         this.treeMaker = treeMaker;
         this.types = types;
         this.names = names;
         this.symtab = symtab;
-        this.javaCompiler = javaCompiler;
-        this.moduleSymbol = moduleSymbol;
         this.classReader = classReader;
+        this.moduleSymbol = moduleSymbol;
+    }
+
+    public void setIndex(AtomicInteger index)
+    {
+        this.index = index;
+    }
+
+    public void setThiz(Type thiz)
+    {
+        this.thiz = thiz;
+    }
+
+    public void setOwner(Symbol owner)
+    {
+        this.owner = owner;
+    }
+
+    public void setNewStatement(ListBuffer<JCTree.JCStatement> newStatement)
+    {
+        this.newStatement = newStatement;
+    }
+
+    @Override
+    public void visitClassDef(JCTree.JCClassDecl classDecl)
+    {
+        thiz = classDecl.type;
+        super.visitClassDef(classDecl);
     }
 
     @Override
     public void visitMethodDef(JCTree.JCMethodDecl methodDecl)
     {
-        JCTree.JCBlock body = methodDecl.getBody();
-        if (body == null) return;
-        treeMaker.at(methodDecl.pos);
-        index = 0;
-        ListBuffer<JCTree.JCStatement> jcStatements = new ListBuffer<>();
-        for (JCTree.JCStatement statement : body.getStatements())
-        {
-            statement.accept(new StatementRouter(jcStatements, methodDecl.sym));
-            jcStatements.append(statement);
-        }
-        methodDecl.body.stats = jcStatements.toList();
+        owner = methodDecl.sym;
+        super.visitMethodDef(methodDecl);
     }
 
     @Override
     public void visitBlock(JCTree.JCBlock block)
     {
-        if (block.isStatic() && hasTaskMake(block))
+        if (block.isStatic()) return;
+        newStatement = new ListBuffer<>();
+        for (JCTree.JCStatement statement : block.getStatements())
         {
-            treeMaker.at(block.pos);
-            index = 0;
-            List<JCTree.JCStatement> statements = block.getStatements();
-            JCTree.JCVariableDecl variableDecl = (JCTree.JCVariableDecl) statements.get(0);
-            Symbol owner = variableDecl.sym.location();
-            ListBuffer<JCTree.JCStatement> jcStatements = new ListBuffer<>();
-            for (JCTree.JCStatement statement : statements)
-            {
-                statement.accept(new StatementRouter(jcStatements, owner));
-                jcStatements.append(statement);
-            }
-            block.stats = jcStatements.toList();
+            SugarScannerV2 sugarScannerV2 = new SugarScannerV2(
+                    treeMaker, types, names, symtab, classReader, moduleSymbol
+            );
+            sugarScannerV2.setIndex(index);
+            sugarScannerV2.setThiz(thiz);
+            sugarScannerV2.setOwner(owner);
+            sugarScannerV2.setNewStatement(newStatement);
+            statement.accept(sugarScannerV2);
+            newStatement.append(statement);
+        }
+        block.stats = newStatement.toList();
+    }
+
+    @Override
+    public void visitApply(JCTree.JCMethodInvocation invocation)
+    {
+        super.visitApply(invocation);
+        SugarTranslator sugarTranslator = new SugarTranslator(newStatement, owner);
+        invocation.accept(sugarTranslator);
+        JCTree.JCMethodInvocation methodInvocationRes = sugarTranslator.getMethodInvocationRes();
+        if (methodInvocationRes != null)
+        {
+            invocation.typeargs = methodInvocationRes.typeargs;
+            invocation.meth = methodInvocationRes.meth;
+            invocation.args = methodInvocationRes.args;
         }
     }
 
-    private boolean hasTaskMake(JCTree.JCBlock block)
-    {
-        List<JCTree.JCStatement> statements = block.getStatements();
-        if (statements.isEmpty()) return false;
-        JCTree.JCStatement jcStatement = statements.get(0);
-        if (!(jcStatement instanceof JCTree.JCVariableDecl)) return false;
-        JCTree.JCVariableDecl variableDecl = (JCTree.JCVariableDecl) jcStatement;
-        return variableDecl.getName().toString().equals("taskMake")
-                || (variableDecl.getType() instanceof JCTree.JCPrimitiveTypeTree
-                && ((JCTree.JCPrimitiveTypeTree) variableDecl.getType()).getPrimitiveTypeKind() == TypeKind.INT);
-    }
-
-    // todo:将来加入严格检查，现在开摆
-    private boolean checkExprAnno(Symbol.MethodSymbol symbol, int index)
-    {
-        Symbol.VarSymbol varSymbol = symbol.getParameters().get(index);
-        return varSymbol.getAnnotation(Expr.class) != null;
-    }
-
-    private Symbol.MethodSymbol getMethodSymbol(Class<?> clazz, String methodName, java.util.List<Class<?>> args)
-    {
-        Name name = names.fromString(methodName);
-        ListBuffer<Type> argTypes = new ListBuffer<>();
-        for (Class<?> as : args)
-        {
-            if (as.isArray())
-            {
-                Class<?> componentType = as.getComponentType();
-                Type.ArrayType arrayType = types.makeArrayType(getType(componentType));
-                argTypes.append(arrayType);
-            }
-            else
-            {
-                argTypes.append(getType(as));
-            }
-        }
-        for (Symbol enclosedElement : getClassSymbol(clazz).getEnclosedElements())
-        {
-            if (!(enclosedElement instanceof Symbol.MethodSymbol)) continue;
-            Symbol.MethodSymbol methodSymbol = (Symbol.MethodSymbol) enclosedElement;
-            if (!methodSymbol.getSimpleName().equals(name)) continue;
-            if (methodSymbol.getParameters().size() != argTypes.size()) continue;
-            List<Symbol.VarSymbol> parameters = methodSymbol.getParameters();
-            ListBuffer<Type> vars = new ListBuffer<>();
-            for (Symbol.VarSymbol parameter : parameters)
-            {
-                Type type = parameter.asType();
-                vars.append(types.erasure(type));
-            }
-            if (!types.isSubtypes(argTypes.toList(), vars.toList())) continue;
-            return methodSymbol;
-        }
-        throw new RuntimeException(String.format("getMethodSymbol方法无法获取到函数\n 目标类为:%s\n 函数名为:%s\n 参数类型为:%s\n", clazz, methodName, args));
-    }
-
-    private Symbol.MethodSymbol getMethodSymbol(Symbol classSymbol, Name methodName, Type.MethodType methodType)
-    {
-        for (Symbol enclosedElement : classSymbol.getEnclosedElements())
-        {
-            if (!(enclosedElement instanceof Symbol.MethodSymbol)) continue;
-            Symbol.MethodSymbol methodSymbol = (Symbol.MethodSymbol) enclosedElement;
-            if (!methodSymbol.getSimpleName().equals(methodName)) continue;
-            Type methodSymbolType = methodSymbol.asType();
-            List<Type> parameterTypes1 = methodSymbolType.getParameterTypes();
-            List<Type> parameterTypes2 = methodType.getParameterTypes();
-            if (types.isSubtypes(parameterTypes2, types.erasure(parameterTypes1)))
-            {
-                return methodSymbol;
-            }
-        }
-
-        throw new RuntimeException(String.format("getMethodSymbol方法无法获取到函数\n 目标类为:%s\n 函数名为:%s\n 函数类型:%s\n", classSymbol, methodName, methodType));
-    }
-
-    private Symbol.MethodSymbol getMethodSymbol(Symbol classSymbol, Name methodName, java.util.List<JCTree.JCExpression> args)
-    {
-        ListBuffer<Type> argTypes = new ListBuffer<>();
-        for (JCTree.JCExpression expression : args)
-        {
-            argTypes.append(expression.type);
-        }
-        List<Type> typeList = argTypes.toList();
-        //System.out.println(classSymbol + " " + methodName.toString() + " " + args.toString());
-        for (Symbol enclosedElement : classSymbol.getEnclosedElements())
-        {
-            if (!(enclosedElement instanceof Symbol.MethodSymbol)) continue;
-            Symbol.MethodSymbol methodSymbol = (Symbol.MethodSymbol) enclosedElement;
-            if (!methodSymbol.getSimpleName().equals(methodName)) continue;
-            Type methodSymbolType = methodSymbol.asType();
-            List<Type> parameterTypes = methodSymbolType.getParameterTypes();
-            if (typeList.size() != parameterTypes.size()) continue;
-            boolean flag = false;
-            for (int i = 0; i < parameterTypes.size(); i++)
-            {
-                Type parameterType = types.erasure(parameterTypes.get(i));
-                Type listType = types.erasure(typeList.get(i));
-//                System.out.println(parameterType.toString());
-//                System.out.println(listType.toString());
-                if (!parameterType.toString().equals(listType.toString()))
-                {
-                    flag = true;
-                    break;
-                }
-            }
-            if (!flag)
-            {
-                return methodSymbol;
-            }
-        }
-
-        throw new RuntimeException(String.format("getMethodSymbol方法无法获取到函数\n 目标类为:%s\n 函数名为:%s\n 函数类型:%s\n", classSymbol, methodName, args));
-    }
-
-    private Symbol.ClassSymbol getClassSymbol(Class<?> clazz)
-    {
-        Name name = names.fromString(clazz.getName());
-        Symbol.ClassSymbol classSymbol;
-        if (JDK.is9orLater())
-        {
-            classSymbol = ReflectUtil.invokeMethod(symtab, "getClass", Arrays.asList(moduleSymbol, name));
-            if (classSymbol == null)
-            {
-                //classSymbol = ReflectUtil.invokeMethod(javaCompiler, "resolveIdent", Arrays.asList(moduleSymbol, clazz.getName()));
-                classSymbol = classReader.enterClass(name);
-            }
-        }
-        else
-        {
-            classSymbol = ReflectUtil.<Map<Name, Symbol.ClassSymbol>>getFieldValue(symtab, "classes").get(name);
-            if (classSymbol == null)
-            {
-                classSymbol = classReader.enterClass(name);
-            }
-        }
-        return classSymbol;
-    }
-
-    private Type getType(Class<?> clazz)
-    {
-        if (clazz.isPrimitive())
-        {
-            if (clazz == int.class) return symtab.intType;
-            if (clazz == byte.class) return symtab.byteType;
-            if (clazz == short.class) return symtab.shortType;
-            if (clazz == long.class) return symtab.longType;
-            if (clazz == boolean.class) return symtab.booleanType;
-            if (clazz == char.class) return symtab.charType;
-            if (clazz == float.class) return symtab.floatType;
-            if (clazz == double.class) return symtab.doubleType;
-            if (clazz == void.class) return symtab.voidType;
-        }
-        return getClassSymbol(clazz).asType();
-    }
-
-    private JCTree.JCFieldAccess getFactoryMethod(Kind methodType, java.util.List<Class<?>> args)
-    {
-        Name name = names.fromString(methodType.name());
-        ListBuffer<Type> argTypes = new ListBuffer<>();
-        for (Class<?> as : args)
-        {
-            if (as.isArray())
-            {
-                Class<?> componentType = as.getComponentType();
-                Type.ArrayType arrayType = types.makeArrayType(getType(componentType));
-                argTypes.append(arrayType);
-            }
-            else
-            {
-                argTypes.append(getType(as));
-            }
-        }
-        Symbol.ClassSymbol classSymbol = getClassSymbol(Expression.class);
-        Symbol.MethodSymbol methodSymbol = null;
-        for (Symbol enclosedElement : classSymbol.getEnclosedElements())
-        {
-            if (!(enclosedElement instanceof Symbol.MethodSymbol)) continue;
-            Symbol.MethodSymbol element = (Symbol.MethodSymbol) enclosedElement;
-            if (!element.getSimpleName().equals(name)) continue;
-            List<Symbol.VarSymbol> parameters = element.getParameters();
-            if (parameters.isEmpty() && args.isEmpty())
-            {
-                methodSymbol = element;
-                break;
-            }
-            if (parameters.size() != args.size()) continue;
-            ListBuffer<Type> vars = new ListBuffer<>();
-            for (Symbol.VarSymbol parameter : parameters)
-            {
-                vars.append(parameter.asType());
-            }
-            if (!types.isSubtypes(argTypes.toList(), vars.toList())) continue;
-            methodSymbol = element;
-        }
-        if (methodSymbol != null)
-        {
-            return refMakeSelector(treeMaker.Ident(classSymbol), methodSymbol);
-        }
-        throw new RuntimeException(String.format("getFactoryMethod方法无法获取到函数\n 函数名为:%s\n 参数类型为:%s\n", methodType, args));
-    }
-
-    private JCTree.JCFieldAccess refMakeSelector(JCTree.JCExpression base, Symbol sym)
-    {
-        return ReflectUtil.invokeMethod(treeMaker, "Select", Arrays.asList(base, sym));
-    }
-
-    private JCTree.JCFieldAccess getOperator(JCTree.Tag tag)
-    {
-        return getOperator(tag.name());
-    }
-
-    private JCTree.JCFieldAccess getOperator(OperatorType operatorType)
-    {
-        return getOperator(operatorType.name());
-    }
-
-    private JCTree.JCFieldAccess getOperator(String op)
-    {
-        Symbol.ClassSymbol classSymbol = getClassSymbol(OperatorType.class);
-        for (Symbol enclosedElement : classSymbol.getEnclosedElements())
-        {
-            if (enclosedElement.getKind() != ElementKind.ENUM_CONSTANT) continue;
-            if (!op.equals(enclosedElement.getSimpleName().toString())) continue;
-            return refMakeSelector(treeMaker.Ident(classSymbol), enclosedElement);
-        }
-        throw new RuntimeException("getOperator " + classSymbol);
-    }
-
-//    private JCTree.JCFieldAccess to_class(Type type)
-//    {
-//        Symbol.ClassSymbol classSymbol;
-//        if (type.isPrimitiveOrVoid())
-//        {
-//            classSymbol = types.boxedClass(type);
-//        }
-//        else
-//        {
-//            classSymbol = getClassSymbol(type);
-//        }
-//        Type.ClassType classType = new Type.ClassType(Type.noType, List.of(type), getClassSymbol(Class.class));
-//        Symbol.VarSymbol _class = new Symbol.VarSymbol(Flags.InterfaceVarFlags, type.isPrimitiveOrVoid() ? names.TYPE : names._class, classType, classSymbol);
-//        return (JCTree.JCFieldAccess) treeMaker.Select(treeMaker.Ident(classSymbol), _class);
-//    }
-
-    private JCTree.JCNewArray makeArray(Class<?> clazz, List<JCTree.JCExpression> args)
-    {
-        return (JCTree.JCNewArray) treeMaker.NewArray(treeMaker.Ident(getClassSymbol(clazz)), List.nil(), args)
-                .setType(types.makeArrayType(getType(clazz)));
-    }
-
-    private JCTree.JCMethodInvocation reflectField(Type type, String name)
-    {
-        return treeMaker.App(
-                refMakeSelector(
-                        treeMaker.Ident(getClassSymbol(ReflectUtil.class)),
-                        getMethodSymbol(ReflectUtil.class, "getField", Arrays.asList(Class.class, String.class))
-                ),
-                List.of(
-                        treeMaker.ClassLiteral(type),
-                        treeMaker.Literal(name)
-                )
-        );
-    }
-
-    private JCTree.JCMethodInvocation reflectMethod(Type type, String name, ListBuffer<JCTree.JCExpression> args)
-    {
-        return treeMaker.App(
-                refMakeSelector(
-                        treeMaker.Ident(getClassSymbol(ReflectUtil.class)),
-                        getMethodSymbol(
-                                ReflectUtil.class,
-                                "getMethod",
-                                Arrays.asList(Class.class, String.class, Class[].class)
-                        )
-                ),
-                List.of(
-                        treeMaker.ClassLiteral(type),
-                        treeMaker.Literal(name),
-                        makeArray(Class.class, args.toList())
-                )
-        );
-    }
-
-    private JCTree.JCLiteral getNull()
-    {
-        return treeMaker.Literal(TypeTag.BOT, null).setType(symtab.botType);
-    }
-
-    private class SugarTranslator extends TreeTranslator
+    private class SugarTranslator extends TreeScanner
     {
         private final ListBuffer<JCTree.JCStatement> jcStatements;
         private final Map<Name, JCTree.JCVariableDecl> variableDeclMap = new HashMap<>();
         private final Map<Name, JCTree.JCVariableDecl> tempVariableDeclMap = new HashMap<>();
         private final Map<JCTree.JCLambda, JCTree.JCVariableDecl> tempLambdaMap = new HashMap<>();
-        //private final Symbol owner;
+        private final Symbol owner;
+        private JCTree.JCMethodInvocation methodInvocationRes;
+
+        public JCTree.JCMethodInvocation getMethodInvocationRes()
+        {
+            return methodInvocationRes;
+        }
 
         public SugarTranslator(ListBuffer<JCTree.JCStatement> jcStatements, Symbol owner)
         {
             this.jcStatements = jcStatements;
-            //this.owner = owner;
+            this.owner = owner;
         }
 
         @Override
         public void visitApply(JCTree.JCMethodInvocation invocation)
         {
-            super.visitApply(invocation);
             JCTree.JCExpression methodSelect = invocation.getMethodSelect();
             List<JCTree.JCExpression> arguments = invocation.getArguments();
             if (!arguments.isEmpty())
@@ -432,21 +185,22 @@ public class SugarScanner extends TreeScanner
                                     : ((JCTree.JCIdent) methodSelect).getName(),
                             args.toList()
                     );
-                    result = treeMaker.App(
+                    methodInvocationRes = treeMaker.App(
                             methodSelect instanceof JCTree.JCFieldAccess
                                     ? refMakeSelector(((JCTree.JCFieldAccess) methodSelect).getExpression(), methodSymbol)
                                     : treeMaker.Ident(methodSymbol),
                             args.toList());
+//                    methodInvocationRes.typeargs = invocation.getTypeArguments();
                 }
             }
         }
 
         private String getNextLambdaParameter()
         {
-            return "lambdaParameter_" + index++;
+            return "lambdaParameter_" + index.getAndIncrement();
         }
 
-        private JCTree.JCVariableDecl getLocalVar(Type type, String name, Symbol owner)
+        private JCTree.JCVariableDecl getLocalVar(Type type, String name)
         {
             return treeMaker.VarDef(
                     new Symbol.VarSymbol(
@@ -464,7 +218,7 @@ public class SugarScanner extends TreeScanner
                     ));
         }
 
-        private JCTree.JCVariableDecl getLocalLambdaExpr(JCTree.JCExpression body, ListBuffer<JCTree.JCExpression> args, Type returnType, Type gt,Symbol owner)
+        private JCTree.JCVariableDecl getLocalLambdaExpr(JCTree.JCExpression body, ListBuffer<JCTree.JCExpression> args, Type returnType, Type gt)
         {
             Type type = returnType;
 
@@ -739,7 +493,7 @@ public class SugarScanner extends TreeScanner
             {
                 JCTree.JCVariableDecl jcVariableDecl = (JCTree.JCVariableDecl) tree;
                 ListBuffer<JCTree.JCExpression> args = new ListBuffer<>();
-                JCTree.JCVariableDecl localVar = getLocalVar(jcVariableDecl.type, jcVariableDecl.getName().toString(), jcVariableDecl.sym.location());
+                JCTree.JCVariableDecl localVar = getLocalVar(jcVariableDecl.type, jcVariableDecl.getName().toString());
                 jcStatements.append(localVar);
                 tempVariableDeclMap.put(jcVariableDecl.getName(), localVar);
                 args.append(treeMaker.Ident(localVar));
@@ -1090,7 +844,7 @@ public class SugarScanner extends TreeScanner
                     for (VariableTree variableTree : lambda.getParameters())
                     {
                         JCTree.JCVariableDecl jcVariableDecl = (JCTree.JCVariableDecl) variableTree;
-                        JCTree.JCVariableDecl localVar = getLocalVar(jcVariableDecl.type, jcVariableDecl.getName().toString(),lambda.type.tsym.location());
+                        JCTree.JCVariableDecl localVar = getLocalVar(jcVariableDecl.type, jcVariableDecl.getName().toString());
                         args.append(treeMaker.Ident(localVar));
                         variableDeclMap.put(jcVariableDecl.getName(), localVar);
                         jcStatements.append(localVar);
@@ -1102,8 +856,7 @@ public class SugarScanner extends TreeScanner
                             body,
                             args,
                             returnType,
-                            lambda.type,
-                            lambda.type.tsym.location()
+                            lambda.type
                     );
                     jcStatements.append(localLambdaExpr);
                     tempLambdaMap.put(lambda, localLambdaExpr);
@@ -1112,35 +865,292 @@ public class SugarScanner extends TreeScanner
             }
             throw new RuntimeException("不支持的类型:" + tree.type + "\n" + tree);
         }
-    }
 
-    private class StatementRouter extends TreeScanner
-    {
-        private final ListBuffer<JCTree.JCStatement> jcStatements;
-        private final Symbol owner;
-
-        public StatementRouter(ListBuffer<JCTree.JCStatement> jcStatements, Symbol owner)
+        private boolean hasTaskMake(JCTree.JCBlock block)
         {
-            this.jcStatements = jcStatements;
-            this.owner = owner;
+            List<JCTree.JCStatement> statements = block.getStatements();
+            if (statements.isEmpty()) return false;
+            JCTree.JCStatement jcStatement = statements.get(0);
+            if (!(jcStatement instanceof JCTree.JCVariableDecl)) return false;
+            JCTree.JCVariableDecl variableDecl = (JCTree.JCVariableDecl) jcStatement;
+            return variableDecl.getName().toString().equals("taskMake")
+                    || (variableDecl.getType() instanceof JCTree.JCPrimitiveTypeTree
+                    && ((JCTree.JCPrimitiveTypeTree) variableDecl.getType()).getPrimitiveTypeKind() == TypeKind.INT);
         }
 
-        @Override
-        public void visitApply(JCTree.JCMethodInvocation tree)
+        // todo:将来加入严格检查，现在开摆
+        private boolean checkExprAnno(Symbol.MethodSymbol symbol, int index)
         {
-            tree.accept(new SugarTranslator(jcStatements, owner));
+            Symbol.VarSymbol varSymbol = symbol.getParameters().get(index);
+            return varSymbol.getAnnotation(Expr.class) != null;
         }
 
-        @Override
-        public void visitBlock(JCTree.JCBlock tree)
+        private Symbol.MethodSymbol getMethodSymbol(Class<?> clazz, String methodName, java.util.List<Class<?>> args)
         {
-            ListBuffer<JCTree.JCStatement> temps = new ListBuffer<>();
-            for (JCTree.JCStatement statement : tree.getStatements())
+            Name name = names.fromString(methodName);
+            ListBuffer<Type> argTypes = new ListBuffer<>();
+            for (Class<?> as : args)
             {
-                statement.accept(new StatementRouter(temps, owner));
-                temps.append(statement);
+                if (as.isArray())
+                {
+                    Class<?> componentType = as.getComponentType();
+                    Type.ArrayType arrayType = types.makeArrayType(getType(componentType));
+                    argTypes.append(arrayType);
+                }
+                else
+                {
+                    argTypes.append(getType(as));
+                }
             }
-            tree.stats = temps.toList();
+            for (Symbol enclosedElement : getClassSymbol(clazz).getEnclosedElements())
+            {
+                if (!(enclosedElement instanceof Symbol.MethodSymbol)) continue;
+                Symbol.MethodSymbol methodSymbol = (Symbol.MethodSymbol) enclosedElement;
+                if (!methodSymbol.getSimpleName().equals(name)) continue;
+                if (methodSymbol.getParameters().size() != argTypes.size()) continue;
+                List<Symbol.VarSymbol> parameters = methodSymbol.getParameters();
+                ListBuffer<Type> vars = new ListBuffer<>();
+                for (Symbol.VarSymbol parameter : parameters)
+                {
+                    Type type = parameter.asType();
+                    vars.append(types.erasure(type));
+                }
+                if (!types.isSubtypes(argTypes.toList(), vars.toList())) continue;
+                return methodSymbol;
+            }
+            throw new RuntimeException(String.format("getMethodSymbol方法无法获取到函数\n 目标类为:%s\n 函数名为:%s\n 参数类型为:%s\n", clazz, methodName, args));
+        }
+
+        private Symbol.MethodSymbol getMethodSymbol(Symbol classSymbol, Name methodName, Type.MethodType methodType)
+        {
+            for (Symbol enclosedElement : classSymbol.getEnclosedElements())
+            {
+                if (!(enclosedElement instanceof Symbol.MethodSymbol)) continue;
+                Symbol.MethodSymbol methodSymbol = (Symbol.MethodSymbol) enclosedElement;
+                if (!methodSymbol.getSimpleName().equals(methodName)) continue;
+                Type methodSymbolType = methodSymbol.asType();
+                List<Type> parameterTypes1 = methodSymbolType.getParameterTypes();
+                List<Type> parameterTypes2 = methodType.getParameterTypes();
+                if (types.isSubtypes(parameterTypes2, types.erasure(parameterTypes1)))
+                {
+                    return methodSymbol;
+                }
+            }
+
+            throw new RuntimeException(String.format("getMethodSymbol方法无法获取到函数\n 目标类为:%s\n 函数名为:%s\n 函数类型:%s\n", classSymbol, methodName, methodType));
+        }
+
+        private Symbol.MethodSymbol getMethodSymbol(Symbol classSymbol, Name methodName, java.util.List<JCTree.JCExpression> args)
+        {
+            ListBuffer<Type> argTypes = new ListBuffer<>();
+            for (JCTree.JCExpression expression : args)
+            {
+                argTypes.append(expression.type);
+            }
+            List<Type> typeList = argTypes.toList();
+            //System.out.println(classSymbol + " " + methodName.toString() + " " + args.toString());
+            for (Symbol enclosedElement : classSymbol.getEnclosedElements())
+            {
+                if (!(enclosedElement instanceof Symbol.MethodSymbol)) continue;
+                Symbol.MethodSymbol methodSymbol = (Symbol.MethodSymbol) enclosedElement;
+                if (!methodSymbol.getSimpleName().equals(methodName)) continue;
+                Type methodSymbolType = methodSymbol.asType();
+                List<Type> parameterTypes = methodSymbolType.getParameterTypes();
+                if (typeList.size() != parameterTypes.size()) continue;
+                boolean flag = false;
+                for (int i = 0; i < parameterTypes.size(); i++)
+                {
+                    Type parameterType = types.erasure(parameterTypes.get(i));
+                    Type listType = types.erasure(typeList.get(i));
+//                System.out.println(parameterType.toString());
+//                System.out.println(listType.toString());
+                    if (!parameterType.toString().equals(listType.toString()))
+                    {
+                        flag = true;
+                        break;
+                    }
+                }
+                if (!flag)
+                {
+                    return methodSymbol;
+                }
+            }
+
+            throw new RuntimeException(String.format("getMethodSymbol方法无法获取到函数\n 目标类为:%s\n 函数名为:%s\n 函数类型:%s\n", classSymbol, methodName, args));
+        }
+
+        private Symbol.ClassSymbol getClassSymbol(Class<?> clazz)
+        {
+            Name name = names.fromString(clazz.getName());
+            Symbol.ClassSymbol classSymbol;
+            if (JDK.is9orLater())
+            {
+                classSymbol = ReflectUtil.invokeMethod(symtab, "getClass", Arrays.asList(moduleSymbol, name));
+                if (classSymbol == null)
+                {
+                    //classSymbol = ReflectUtil.invokeMethod(javaCompiler, "resolveIdent", Arrays.asList(moduleSymbol, clazz.getName()));
+                    classSymbol = classReader.enterClass(name);
+                }
+            }
+            else
+            {
+                classSymbol = ReflectUtil.<Map<Name, Symbol.ClassSymbol>>getFieldValue(symtab, "classes").get(name);
+                if (classSymbol == null)
+                {
+                    classSymbol = classReader.enterClass(name);
+                }
+            }
+            return classSymbol;
+        }
+
+        private Type getType(Class<?> clazz)
+        {
+            if (clazz.isPrimitive())
+            {
+                if (clazz == int.class) return symtab.intType;
+                if (clazz == byte.class) return symtab.byteType;
+                if (clazz == short.class) return symtab.shortType;
+                if (clazz == long.class) return symtab.longType;
+                if (clazz == boolean.class) return symtab.booleanType;
+                if (clazz == char.class) return symtab.charType;
+                if (clazz == float.class) return symtab.floatType;
+                if (clazz == double.class) return symtab.doubleType;
+                if (clazz == void.class) return symtab.voidType;
+            }
+            return getClassSymbol(clazz).asType();
+        }
+
+        private JCTree.JCFieldAccess getFactoryMethod(Kind methodType, java.util.List<Class<?>> args)
+        {
+            Name name = names.fromString(methodType.name());
+            ListBuffer<Type> argTypes = new ListBuffer<>();
+            for (Class<?> as : args)
+            {
+                if (as.isArray())
+                {
+                    Class<?> componentType = as.getComponentType();
+                    Type.ArrayType arrayType = types.makeArrayType(getType(componentType));
+                    argTypes.append(arrayType);
+                }
+                else
+                {
+                    argTypes.append(getType(as));
+                }
+            }
+            Symbol.ClassSymbol classSymbol = getClassSymbol(Expression.class);
+            Symbol.MethodSymbol methodSymbol = null;
+            for (Symbol enclosedElement : classSymbol.getEnclosedElements())
+            {
+                if (!(enclosedElement instanceof Symbol.MethodSymbol)) continue;
+                Symbol.MethodSymbol element = (Symbol.MethodSymbol) enclosedElement;
+                if (!element.getSimpleName().equals(name)) continue;
+                List<Symbol.VarSymbol> parameters = element.getParameters();
+                if (parameters.isEmpty() && args.isEmpty())
+                {
+                    methodSymbol = element;
+                    break;
+                }
+                if (parameters.size() != args.size()) continue;
+                ListBuffer<Type> vars = new ListBuffer<>();
+                for (Symbol.VarSymbol parameter : parameters)
+                {
+                    vars.append(parameter.asType());
+                }
+                if (!types.isSubtypes(argTypes.toList(), vars.toList())) continue;
+                methodSymbol = element;
+            }
+            if (methodSymbol != null)
+            {
+                return refMakeSelector(treeMaker.Ident(classSymbol), methodSymbol);
+            }
+            throw new RuntimeException(String.format("getFactoryMethod方法无法获取到函数\n 函数名为:%s\n 参数类型为:%s\n", methodType, args));
+        }
+
+        private JCTree.JCFieldAccess refMakeSelector(JCTree.JCExpression base, Symbol sym)
+        {
+            return ReflectUtil.invokeMethod(treeMaker, "Select", Arrays.asList(base, sym));
+        }
+
+        private JCTree.JCFieldAccess getOperator(JCTree.Tag tag)
+        {
+            return getOperator(tag.name());
+        }
+
+        private JCTree.JCFieldAccess getOperator(OperatorType operatorType)
+        {
+            return getOperator(operatorType.name());
+        }
+
+        private JCTree.JCFieldAccess getOperator(String op)
+        {
+            Symbol.ClassSymbol classSymbol = getClassSymbol(OperatorType.class);
+            for (Symbol enclosedElement : classSymbol.getEnclosedElements())
+            {
+                if (enclosedElement.getKind() != ElementKind.ENUM_CONSTANT) continue;
+                if (!op.equals(enclosedElement.getSimpleName().toString())) continue;
+                return refMakeSelector(treeMaker.Ident(classSymbol), enclosedElement);
+            }
+            throw new RuntimeException("getOperator " + classSymbol);
+        }
+
+//    private JCTree.JCFieldAccess to_class(Type type)
+//    {
+//        Symbol.ClassSymbol classSymbol;
+//        if (type.isPrimitiveOrVoid())
+//        {
+//            classSymbol = types.boxedClass(type);
+//        }
+//        else
+//        {
+//            classSymbol = getClassSymbol(type);
+//        }
+//        Type.ClassType classType = new Type.ClassType(Type.noType, List.of(type), getClassSymbol(Class.class));
+//        Symbol.VarSymbol _class = new Symbol.VarSymbol(Flags.InterfaceVarFlags, type.isPrimitiveOrVoid() ? names.TYPE : names._class, classType, classSymbol);
+//        return (JCTree.JCFieldAccess) treeMaker.Select(treeMaker.Ident(classSymbol), _class);
+//    }
+
+        private JCTree.JCNewArray makeArray(Class<?> clazz, List<JCTree.JCExpression> args)
+        {
+            return (JCTree.JCNewArray) treeMaker.NewArray(treeMaker.Ident(getClassSymbol(clazz)), List.nil(), args)
+                    .setType(types.makeArrayType(getType(clazz)));
+        }
+
+        private JCTree.JCMethodInvocation reflectField(Type type, String name)
+        {
+            return treeMaker.App(
+                    refMakeSelector(
+                            treeMaker.Ident(getClassSymbol(ReflectUtil.class)),
+                            getMethodSymbol(ReflectUtil.class, "getField", Arrays.asList(Class.class, String.class))
+                    ),
+                    List.of(
+                            treeMaker.ClassLiteral(type),
+                            treeMaker.Literal(name)
+                    )
+            );
+        }
+
+        private JCTree.JCMethodInvocation reflectMethod(Type type, String name, ListBuffer<JCTree.JCExpression> args)
+        {
+            return treeMaker.App(
+                    refMakeSelector(
+                            treeMaker.Ident(getClassSymbol(ReflectUtil.class)),
+                            getMethodSymbol(
+                                    ReflectUtil.class,
+                                    "getMethod",
+                                    Arrays.asList(Class.class, String.class, Class[].class)
+                            )
+                    ),
+                    List.of(
+                            treeMaker.ClassLiteral(type),
+                            treeMaker.Literal(name),
+                            makeArray(Class.class, args.toList())
+                    )
+            );
+        }
+
+        private JCTree.JCLiteral getNull()
+        {
+            return treeMaker.Literal(TypeTag.BOT, null).setType(symtab.botType);
         }
     }
 }
