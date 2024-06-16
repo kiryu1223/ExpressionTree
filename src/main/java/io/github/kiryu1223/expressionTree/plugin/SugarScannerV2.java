@@ -107,16 +107,16 @@ public class SugarScannerV2 extends TreeScanner
     @Override
     public void visitApply(JCTree.JCMethodInvocation invocation)
     {
-        super.visitApply(invocation);
+        //super.visitApply(invocation);
         SugarTranslator sugarTranslator = new SugarTranslator(newStatement, owner);
         invocation.accept(sugarTranslator);
-        JCTree.JCMethodInvocation methodInvocationRes = sugarTranslator.getMethodInvocationRes();
-        if (methodInvocationRes != null)
-        {
-            invocation.typeargs = methodInvocationRes.typeargs;
-            invocation.meth = methodInvocationRes.meth;
-            invocation.args = methodInvocationRes.args;
-        }
+//        JCTree.JCMethodInvocation methodInvocationRes = sugarTranslator.getMethodInvocationRes();
+//        if (methodInvocationRes != null)
+//        {
+//            invocation.typeargs = methodInvocationRes.typeargs;
+//            invocation.meth = methodInvocationRes.meth;
+//            invocation.args = methodInvocationRes.args;
+//        }
     }
 
     private class SugarTranslator extends TreeScanner
@@ -126,12 +126,12 @@ public class SugarScannerV2 extends TreeScanner
         private final Map<Name, JCTree.JCVariableDecl> tempVariableDeclMap = new HashMap<>();
         private final Map<JCTree.JCLambda, JCTree.JCVariableDecl> tempLambdaMap = new HashMap<>();
         private final Symbol owner;
-        private JCTree.JCMethodInvocation methodInvocationRes;
-
-        public JCTree.JCMethodInvocation getMethodInvocationRes()
-        {
-            return methodInvocationRes;
-        }
+//        private JCTree.JCMethodInvocation methodInvocationRes;
+//
+//        public JCTree.JCMethodInvocation getMethodInvocationRes()
+//        {
+//            return methodInvocationRes;
+//        }
 
         public SugarTranslator(ListBuffer<JCTree.JCStatement> jcStatements, Symbol owner)
         {
@@ -142,6 +142,7 @@ public class SugarScannerV2 extends TreeScanner
         @Override
         public void visitApply(JCTree.JCMethodInvocation invocation)
         {
+            super.visitApply(invocation);
             JCTree.JCExpression methodSelect = invocation.getMethodSelect();
             List<JCTree.JCExpression> arguments = invocation.getArguments();
             if (!arguments.isEmpty())
@@ -185,12 +186,15 @@ public class SugarScannerV2 extends TreeScanner
                                     : ((JCTree.JCIdent) methodSelect).getName(),
                             args.toList()
                     );
-                    methodInvocationRes = treeMaker.App(
+                    JCTree.JCMethodInvocation methodInvocationRes = treeMaker.App(
                             methodSelect instanceof JCTree.JCFieldAccess
                                     ? refMakeSelector(((JCTree.JCFieldAccess) methodSelect).getExpression(), methodSymbol)
                                     : treeMaker.Ident(methodSymbol),
                             args.toList());
-//                    methodInvocationRes.typeargs = invocation.getTypeArguments();
+
+                    invocation.typeargs = methodInvocationRes.typeargs;
+                    invocation.meth = methodInvocationRes.meth;
+                    invocation.args = methodInvocationRes.args;
                 }
             }
         }

@@ -24,6 +24,7 @@ import java.util.*;
 
 import static io.github.kiryu1223.expressionTree.expressions.Kind.*;
 
+@Deprecated
 public class SugarScanner extends TreeScanner
 {
     private final TreeMaker treeMaker;
