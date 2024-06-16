@@ -23,6 +23,7 @@ jdk15后的版本(**不包括jdk15**)因为封装规则的修改，需要往项�
 --add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED
 --add-exports=jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED
 --add-exports=jdk.compiler/com.sun.tools.javac.comp=ALL-UNNAMED
+--add-exports=jdk.compiler/com.sun.tools.javac.jvm=ALL-UNNAMED
 ```
 
 ## maven
@@ -30,7 +31,7 @@ jdk15后的版本(**不包括jdk15**)因为封装规则的修改，需要往项�
 <dependency>
   <groupId>io.github.kiryu1223</groupId>
   <artifactId>ExpressionTree</artifactId>
-  <version>1.2.7</version>
+  <version>1.3.2</version>
 </dependency>
 ```
 
@@ -38,6 +39,7 @@ jdk15后的版本(**不包括jdk15**)因为封装规则的修改，需要往项�
 1. 引入依赖
 2. 在build-plugins-plugin-configuration-compilerArgs添加插件开启指令-Xplugin:ExpressionTree，具体如下
 ```xml
+
 <build>
     <plugins>
         <plugin>
@@ -48,6 +50,14 @@ jdk15后的版本(**不包括jdk15**)因为封装规则的修改，需要往项�
                 <compilerArgs>
                     <arg>-Xplugin:ExpressionTree</arg>
                 </compilerArgs>
+                <annotationProcessorPaths>
+                    <path>
+                        <groupId>com.easy-query</groupId>
+                        <artifactId>sql-api-lambda</artifactId>
+                        <version>2.0.31</version>
+                    </path>
+                    <!-- 你的其他注解处理器，比如说lombok -->
+                </annotationProcessorPaths>
             </configuration>
         </plugin>
     </plugins>
