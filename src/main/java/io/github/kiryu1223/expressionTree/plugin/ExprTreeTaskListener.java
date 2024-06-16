@@ -76,6 +76,7 @@ public class ExprTreeTaskListener implements TaskListener
             if (!(tree instanceof JCTree.JCClassDecl)) continue;
             JCTree.JCClassDecl classDecl = (JCTree.JCClassDecl) tree;
             //Type thiz = classDecl.type;
+            SugarScannerV2.resetIndex();
             classDecl.accept(new SugarScannerV2(treeMaker, types, names, symtab, classReader, moduleSymbol));
             //classDecl.accept(new SugarScanner(thiz, treeMaker, types, names, symtab, javaCompiler,classReader, moduleSymbol));
         }
@@ -100,17 +101,17 @@ public class ExprTreeTaskListener implements TaskListener
                 @Override
                 public void visitBlock(JCTree.JCBlock block)
                 {
-                        treeMaker.at(block.pos);
-                        JCTree.JCVariableDecl variableDecl = treeMaker.VarDef(
-                                treeMaker.Modifiers(0),
-                                names.fromString("taskMake"),
-                                treeMaker.TypeIdent(TypeTag.INT),
-                                null
-                        );
-                        ListBuffer<JCTree.JCStatement> expressions = new ListBuffer<>();
-                        expressions.add(variableDecl);
-                        expressions.addAll(block.getStatements());
-                        block.stats = expressions.toList();
+                    treeMaker.at(block.pos);
+                    JCTree.JCVariableDecl variableDecl = treeMaker.VarDef(
+                            treeMaker.Modifiers(0),
+                            names.fromString("taskMake"),
+                            treeMaker.TypeIdent(TypeTag.INT),
+                            null
+                    );
+                    ListBuffer<JCTree.JCStatement> expressions = new ListBuffer<>();
+                    expressions.add(variableDecl);
+                    expressions.addAll(block.getStatements());
+                    block.stats = expressions.toList();
                 }
             });
         }

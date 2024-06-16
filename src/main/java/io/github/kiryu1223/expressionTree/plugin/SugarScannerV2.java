@@ -25,14 +25,13 @@ import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static io.github.kiryu1223.expressionTree.expressions.Kind.*;
-import static io.github.kiryu1223.expressionTree.expressions.Kind.TypeCast;
 
 public class SugarScannerV2 extends TreeScanner
 {
     private Symbol thiz;
     private Symbol owner;
     private ListBuffer<JCTree.JCStatement> newStatement;
-    private AtomicInteger index = new AtomicInteger(0);
+    private static long index = 0;
     private final TreeMaker treeMaker;
     private final Types types;
     private final Names names;
@@ -50,9 +49,9 @@ public class SugarScannerV2 extends TreeScanner
         this.moduleSymbol = moduleSymbol;
     }
 
-    public void setIndex(AtomicInteger index)
+    public static void resetIndex()
     {
-        this.index = index;
+        index = 0;
     }
 
     public void setThiz(Symbol thiz)
@@ -99,7 +98,6 @@ public class SugarScannerV2 extends TreeScanner
     {
         owner = methodDecl.sym;
         super.visitMethodDef(methodDecl);
-        owner = null;
     }
 
     @Override
@@ -110,6 +108,7 @@ public class SugarScannerV2 extends TreeScanner
             if (owner != null)
             {
                 joinBlock(block);
+                owner = null;
             }
             else
             {
@@ -138,7 +137,6 @@ public class SugarScannerV2 extends TreeScanner
             SugarScannerV2 sugarScannerV2 = new SugarScannerV2(
                     treeMaker, types, names, symtab, classReader, moduleSymbol
             );
-            sugarScannerV2.setIndex(index);
             sugarScannerV2.setThiz(thiz);
             sugarScannerV2.setOwner(owner);
             sugarScannerV2.setNewStatement(newStatement);
@@ -152,8 +150,7 @@ public class SugarScannerV2 extends TreeScanner
     public void visitApply(JCTree.JCMethodInvocation invocation)
     {
         //super.visitApply(invocation);
-        SugarTranslator sugarTranslator = new SugarTranslator(newStatement, owner);
-        invocation.accept(sugarTranslator);
+        invocation.accept(new SugarTranslator(newStatement, owner));
 //        JCTree.JCMethodInvocation methodInvocationRes = sugarTranslator.getMethodInvocationRes();
 //        if (methodInvocationRes != null)
 //        {
@@ -245,7 +242,7 @@ public class SugarScannerV2 extends TreeScanner
 
         private String getNextLambdaParameter()
         {
-            return "lambdaParameter_" + index.getAndIncrement();
+            return "lambdaParameter_" + index++;
         }
 
         private JCTree.JCVariableDecl getLocalVar(Type type, String name)
