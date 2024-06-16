@@ -6,7 +6,7 @@
 
     <groupId>io.github.kiryu1223</groupId>
     <artifactId>ExpressionTree</artifactId>
-    <version>1.3.1</version>
+    <version>1.3.2</version>
 
     <name>ExpressionTree</name>
     <description>java static expressionTree</description>
@@ -34,7 +34,7 @@
             <url>https://s01.oss.sonatype.org/content/repositories/snapshots</url>
         </snapshotRepository>
         <repository>
-            <id>ossrh</id>
+            <id>release</id>
             <url>https://s01.oss.sonatype.org/service/local/staging/deploy/maven2/</url>
         </repository>
     </distributionManagement>
@@ -47,7 +47,7 @@
 
     <profiles>
         <profile>
-            <id>ossrh</id>
+            <id>release</id>
             <build>
                 <plugins>
                     <!-- 11. 生成签名，确定使用那个gpg秘钥 -->
@@ -75,7 +75,7 @@
                         <extensions>true</extensions>
                         <configuration>
                             <!-- 这里的id必须要和全局配置中的server一致 -->
-                            <serverId>ossrh</serverId>
+                            <serverId>release</serverId>
                             <!-- 这个地址，一定要和issue的评论中给出的地址一致！ -->
                             <nexusUrl>https://s01.oss.sonatype.org/</nexusUrl>
                             <!-- 如果希望发布后自动执行close和release操作，此处可以调整为true -->

@@ -1124,17 +1124,8 @@ public class SugarScanner extends TreeScanner
             this.owner = owner;
         }
 
-//        private void deepBlock(JCTree.JCStatement statement)
-//        {
-//            JCTree.JCBlock block = (JCTree.JCBlock) statement;
-//            ListBuffer<JCTree.JCStatement> statements = new ListBuffer<>();
-//            block.accept(new StatementRouter(statements, owner));
-//            statements.appendList(block.getStatements());
-//            block.stats = statements.toList();
-//        }
-
         @Override
-        public void visitExec(JCTree.JCExpressionStatement tree)
+        public void visitApply(JCTree.JCMethodInvocation tree)
         {
             tree.accept(new SugarTranslator(jcStatements, owner));
         }
@@ -1150,29 +1141,5 @@ public class SugarScanner extends TreeScanner
             }
             tree.stats = temps.toList();
         }
-
-//        @Override
-//        public void visitIf(JCTree.JCIf tree)
-//        {
-//            scan(tree.getCondition());
-//            if (tree.getThenStatement() != null
-//                    && tree.getThenStatement().getKind() == Tree.Kind.BLOCK)
-//            {
-//                deepBlock(tree.getThenStatement());
-//            }
-//            else
-//            {
-//                scan(tree.getThenStatement());
-//            }
-//            if (tree.getElseStatement() != null
-//                    && tree.getElseStatement().getKind() == Tree.Kind.BLOCK)
-//            {
-//                deepBlock(tree.getElseStatement());
-//            }
-//            else
-//            {
-//                scan(tree.getElseStatement());
-//            }
-//        }
     }
 }
