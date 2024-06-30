@@ -1,6 +1,6 @@
 package io.github.kiryu1223.expressionTree.expressions;
 
-public class ResultThrowVisitor<R> extends ResultVisitor<R>
+public abstract class ResultThrowVisitor<R> extends ResultVisitor<R>
 {
     @Override
     public R visit(BinaryExpression binaryExpression)
