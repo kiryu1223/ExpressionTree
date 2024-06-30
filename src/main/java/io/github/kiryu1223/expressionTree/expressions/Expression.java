@@ -43,11 +43,6 @@ public abstract class Expression
         visitor.visit(this, v);
     }
 
-    public void accept(DeepFindVisitor visitor)
-    {
-        visitor.visit(this);
-    }
-
     public static BinaryExpression Binary(Expression left, Expression right, OperatorType operatorType)
     {
         return new BinaryExpression(left, right, operatorType);

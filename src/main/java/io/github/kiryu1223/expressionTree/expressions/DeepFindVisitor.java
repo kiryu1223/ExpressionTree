@@ -2,7 +2,7 @@ package io.github.kiryu1223.expressionTree.expressions;
 
 import java.util.List;
 
-public class DeepFindVisitor
+public class DeepFindVisitor extends Visitor
 {
     protected void deep(Expression expression)
     {
@@ -19,106 +19,6 @@ public class DeepFindVisitor
             {
                 expression.accept(this);
             }
-        }
-    }
-    public void visit(Expression expression)
-    {
-        if (expression == null) return;
-        switch (expression.getKind())
-        {
-            case Binary:
-                visit((BinaryExpression) expression);
-                break;
-            case Unary:
-                visit((UnaryExpression) expression);
-                break;
-            case Constant:
-                visit((ConstantExpression) expression);
-                break;
-            case FieldSelect:
-                visit((FieldSelectExpression) expression);
-                break;
-            case MethodCall:
-                visit((MethodCallExpression) expression);
-                break;
-            case Parameter:
-                visit((ParameterExpression) expression);
-                break;
-            case New:
-                visit((NewExpression) expression);
-                break;
-            case NewArray:
-                visit((NewArrayExpression) expression);
-                break;
-            case Block:
-                visit((BlockExpression) expression);
-                break;
-            case Lambda:
-                visit((LambdaExpression<?>) expression);
-                break;
-            case Variable:
-                visit((VariableExpression) expression);
-                break;
-            case Index:
-                visit((IndexExpression) expression);
-                break;
-            case Assign:
-                visit((AssignExpression) expression);
-                break;
-            case AssignOp:
-                visit((AssignOpExpression) expression);
-                break;
-            case StaticClass:
-                visit((StaticClassExpression) expression);
-                break;
-            case Reference:
-                visit((ReferenceExpression) expression);
-                break;
-            case Return:
-                visit((ReturnExpression) expression);
-                break;
-            case Break:
-                visit((BreakExpression) expression);
-                break;
-            case Continue:
-                visit((ContinueExpression) expression);
-                break;
-            case Conditional:
-                visit((ConditionalExpression) expression);
-                break;
-            case If:
-                visit((IfExpression) expression);
-                break;
-            case Parens:
-                visit((ParensExpression) expression);
-                break;
-            case Foreach:
-                visit((ForeachExpression) expression);
-                break;
-            case For:
-                visit((ForExpression) expression);
-                break;
-            case While:
-                visit((WhileExpression) expression);
-                break;
-            case Switch:
-                visit((SwitchExpression) expression);
-                break;
-            case Case:
-                visit((CaseExpression) expression);
-                break;
-            case Catch:
-                visit((CatchExpression) expression);
-                break;
-            case Try:
-                visit((TryExpression) expression);
-                break;
-            case Throw:
-                visit((ThrowExpression) expression);
-                break;
-            case TypeCast:
-                visit((TypeCastExpression) expression);
-                break;
         }
     }
 
