@@ -7,7 +7,6 @@ import com.sun.tools.javac.jvm.ClassReader;
 import com.sun.tools.javac.tree.JCTree;
 import com.sun.tools.javac.tree.TreeMaker;
 import com.sun.tools.javac.tree.TreeScanner;
-import com.sun.tools.javac.tree.TreeTranslator;
 import com.sun.tools.javac.util.List;
 import com.sun.tools.javac.util.ListBuffer;
 import com.sun.tools.javac.util.Name;
@@ -22,7 +21,6 @@ import javax.lang.model.type.TypeKind;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.*;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import static io.github.kiryu1223.expressionTree.expressions.Kind.*;
 
@@ -324,7 +322,7 @@ public class SugarScannerV2 extends TreeScanner
             else if (tree instanceof JCTree.JCIdent)
             {
                 JCTree.JCIdent jcIdent = (JCTree.JCIdent) tree;
-                if (jcIdent.sym.getKind() == ElementKind.CLASS)
+                if (jcIdent.sym.getKind().isClass() || jcIdent.sym.getKind().isInterface())
                 {
                     return treeMaker.App(
                             getFactoryMethod(StaticClass, Collections.singletonList(Class.class)),
@@ -455,6 +453,7 @@ public class SugarScannerV2 extends TreeScanner
             else if (tree instanceof JCTree.JCFieldAccess)
             {
                 JCTree.JCFieldAccess jcFieldAccess = (JCTree.JCFieldAccess) tree;
+                //System.out.println(jcFieldAccess.sym.getKind());
                 if (jcFieldAccess.sym.getKind() == ElementKind.FIELD
                         // class是关键字不能作为字段和函数名，可以直接判断
                         && jcFieldAccess.getIdentifier().toString().equals("class"))
