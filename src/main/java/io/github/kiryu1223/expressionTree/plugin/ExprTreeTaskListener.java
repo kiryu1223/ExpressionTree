@@ -58,7 +58,7 @@ public class ExprTreeTaskListener implements TaskListener
         }
         catch (Throwable e)
         {
-            e.printStackTrace();
+            throw new RuntimeException(e);
         }
     }
 

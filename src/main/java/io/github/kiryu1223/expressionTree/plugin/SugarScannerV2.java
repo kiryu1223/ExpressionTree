@@ -1,5 +1,6 @@
 package io.github.kiryu1223.expressionTree.plugin;
 
+import com.sun.source.tree.LambdaExpressionTree;
 import com.sun.source.tree.Tree;
 import com.sun.source.tree.VariableTree;
 import com.sun.tools.javac.code.*;
@@ -203,7 +204,7 @@ public class SugarScannerV2 extends TreeScanner
                 {
                     JCTree.JCExpression jcExpression = arguments.get(i);
                     if (jcExpression.getKind() != Tree.Kind.LAMBDA_EXPRESSION
-                            || !checkExprAnno((Symbol.MethodSymbol) symbol, i))
+                            || !checkExprAnno((Symbol.MethodSymbol) symbol, i, ((JCTree.JCLambda) jcExpression).getBodyKind()))
                     {
                         args.append(jcExpression);
                         continue;
@@ -910,11 +911,19 @@ public class SugarScannerV2 extends TreeScanner
             throw new RuntimeException("不支持的类型:" + tree.type + "\n" + tree);
         }
 
-        // todo:将来加入严格检查，现在开摆
-        private boolean checkExprAnno(Symbol.MethodSymbol symbol, int index)
+        private boolean checkExprAnno(Symbol.MethodSymbol symbol, int index, LambdaExpressionTree.BodyKind bodyKind)
         {
             Symbol.VarSymbol varSymbol = symbol.getParameters().get(index);
-            return varSymbol.getAnnotation(Expr.class) != null;
+            Expr expr = varSymbol.getAnnotation(Expr.class);
+            if (expr == null) return false;
+            Expr.BodyType value = expr.value();
+            if (value == Expr.BodyType.Any) return true;
+            if (value == Expr.BodyType.Expr && bodyKind == LambdaExpressionTree.BodyKind.EXPRESSION
+                    || value == Expr.BodyType.Block && bodyKind == LambdaExpressionTree.BodyKind.STATEMENT)
+            {
+                return true;
+            }
+            throw new RuntimeException(String.format("期望的lambda类型为: %s,实际为: %s\n%s", value == Expr.BodyType.Expr ? "表达式" : "代码块", value == Expr.BodyType.Expr ? "代码块" : "表达式", symbol));
         }
 
         private Symbol.MethodSymbol getMethodSymbol(Class<?> clazz, String methodName, java.util.List<Class<?>> args)

@@ -7,4 +7,14 @@ import java.lang.annotation.Target;
 
 @Retention(RetentionPolicy.CLASS)
 @Target(ElementType.PARAMETER)
-public @interface Expr {}
+public @interface Expr
+{
+    BodyType value() default BodyType.Any;
+
+    enum BodyType
+    {
+        Any,
+        Expr,
+        Block,
+    }
+}
