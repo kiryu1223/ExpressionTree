@@ -2,6 +2,7 @@ package io.github.kiryu1223.expressionTree.expressions;
 
 import io.github.kiryu1223.expressionTree.delegate.Delegate;
 
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.Arrays;
@@ -13,6 +14,7 @@ public abstract class Expression
     {
         return null;
     }
+
     protected boolean hasParameterExpression()
     {
         AtomicBoolean flag = new AtomicBoolean(false);
@@ -27,6 +29,7 @@ public abstract class Expression
 
         return flag.get();
     }
+
     public abstract Kind getKind();
 
     public abstract String toString();
@@ -73,9 +76,9 @@ public abstract class Expression
         return new ParameterExpression(type, name);
     }
 
-    public static NewExpression New(Class<?> type, Class<?>[] typeArgs, Expression[] constructorArgs, BlockExpression body)
+    public static NewExpression New(Class<?> type, Class<?>[] typeArgs, Constructor<?> constructor, Expression[] constructorArgs, BlockExpression body)
     {
-        return new NewExpression(type, Arrays.asList(typeArgs), Arrays.asList(constructorArgs), body);
+        return new NewExpression(type, Arrays.asList(typeArgs), constructor, Arrays.asList(constructorArgs), body);
     }
 
     public static <T extends Delegate> LambdaExpression<T> Lambda(Expression body, ParameterExpression[] parameters, Class<?> returnType)

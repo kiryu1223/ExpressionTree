@@ -4,7 +4,6 @@ import com.sun.source.util.TaskEvent;
 import com.sun.source.util.TaskListener;
 import com.sun.tools.javac.code.*;
 import com.sun.tools.javac.jvm.ClassReader;
-import com.sun.tools.javac.main.JavaCompiler;
 import com.sun.tools.javac.tree.JCTree;
 import com.sun.tools.javac.tree.TreeMaker;
 import com.sun.tools.javac.tree.TreeScanner;
@@ -16,7 +15,8 @@ import io.github.kiryu1223.expressionTree.expressions.annos.Setter;
 import io.github.kiryu1223.expressionTree.util.JDK;
 import io.github.kiryu1223.expressionTree.util.ReflectUtil;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.stream.Collectors;
 
 public class ExprTreeTaskListener implements TaskListener
@@ -24,9 +24,9 @@ public class ExprTreeTaskListener implements TaskListener
     private final TreeMaker treeMaker;
     private final Types types;
     private final Names names;
-    //private final Context context;
+    private final Context context;
     private final Symtab symtab;
-    private final JavaCompiler javaCompiler;
+    //private final JavaCompiler javaCompiler;
     private final ClassReader classReader;
 
     public ExprTreeTaskListener(Context context)
@@ -35,9 +35,11 @@ public class ExprTreeTaskListener implements TaskListener
         types = Types.instance(context);
         names = Names.instance(context);
         symtab = Symtab.instance(context);
-        javaCompiler = JavaCompiler.instance(context);
         classReader = ClassReader.instance(context);
+        //javaCompiler = JavaCompiler.instance(context);
+        //classReader = ClassReader.instance(context);
         //this.context = context;
+        this.context = context;
     }
 
     @Override

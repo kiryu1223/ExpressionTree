@@ -19,6 +19,7 @@ import io.github.kiryu1223.expressionTree.util.ReflectUtil;
 
 import javax.lang.model.element.ElementKind;
 import javax.lang.model.type.TypeKind;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.*;
@@ -157,6 +158,35 @@ public class SugarScannerV2 extends TreeScanner
 //            invocation.meth = methodInvocationRes.meth;
 //            invocation.args = methodInvocationRes.args;
 //        }
+    }
+
+    private Symbol.ClassSymbol getClassSymbol(Class<?> clazz)
+    {
+        Name name = names.fromString(clazz.getName());
+        Symbol.ClassSymbol classSymbol;
+        if (JDK.is17orLater())
+        {
+            //classSymbol = ReflectUtil.invokeMethod(classReader, "enterClass", Collections.singletonList(name));
+            classSymbol = ReflectUtil.invokeMethod(symtab, "enterClass", Arrays.asList(moduleSymbol, name));
+        }
+        else if (JDK.is9orLater())
+        {
+            classSymbol = ReflectUtil.invokeMethod(symtab, "getClass", Arrays.asList(moduleSymbol, name));
+            if (classSymbol == null)
+            {
+                //classSymbol = ReflectUtil.invokeMethod(javaCompiler, "resolveIdent", Arrays.asList(moduleSymbol, clazz.getName()));
+                classSymbol = classReader.enterClass(name);
+            }
+        }
+        else
+        {
+            classSymbol = ReflectUtil.<Map<Name, Symbol.ClassSymbol>>getFieldValue(symtab, "classes").get(name);
+            if (classSymbol == null)
+            {
+                classSymbol = classReader.enterClass(name);
+            }
+        }
+        return classSymbol;
     }
 
     private class SugarTranslator extends TreeScanner
@@ -360,11 +390,6 @@ public class SugarScannerV2 extends TreeScanner
             {
                 JCTree.JCMethodInvocation jcMethodInvocation = (JCTree.JCMethodInvocation) tree;
                 JCTree.JCExpression methodSelect = jcMethodInvocation.getMethodSelect();
-                ListBuffer<JCTree.JCExpression> ts = new ListBuffer<>();
-                for (Type parameterType : methodSelect.type.getParameterTypes())
-                {
-                    ts.append(treeMaker.ClassLiteral(parameterType));
-                }
                 List<JCTree.JCExpression> arguments = jcMethodInvocation.getArguments();
                 ListBuffer<JCTree.JCExpression> args = new ListBuffer<>();
                 for (JCTree.JCExpression argument : arguments)
@@ -429,6 +454,12 @@ public class SugarScannerV2 extends TreeScanner
                 String methodName = methodSelect instanceof JCTree.JCFieldAccess
                         ? ((JCTree.JCFieldAccess) methodSelect).getIdentifier().toString()
                         : methodSelect.toString();
+
+                ListBuffer<JCTree.JCExpression> ts = new ListBuffer<>();
+                for (Type parameterType : methodSelect.type.asMethodType().getParameterTypes())
+                {
+                    ts.add(treeMaker.ClassLiteral(parameterType));
+                }
 
                 of.append(
                                 reflectMethod(
@@ -587,6 +618,16 @@ public class SugarScannerV2 extends TreeScanner
                 }
                 classes.add(Class[].class);
                 all.append(makeArray(Class.class, typeArgs.toList()));
+
+                //constructor
+                classes.add(Constructor.class);
+                Symbol.MethodSymbol init = (Symbol.MethodSymbol) jcNewClass.constructor;
+                ListBuffer<JCTree.JCExpression> types = new ListBuffer<>();
+                for (Symbol.VarSymbol parameter : init.getParameters())
+                {
+                    types.add(treeMaker.ClassLiteral(parameter.asType()));
+                }
+                all.append(reflectConstructor(jcNewClass.type, types));
 
                 //arg
                 ListBuffer<JCTree.JCExpression> args = new ListBuffer<>();
@@ -1020,30 +1061,6 @@ public class SugarScannerV2 extends TreeScanner
             throw new RuntimeException(String.format("getMethodSymbol方法无法获取到函数\n 目标类为:%s\n 函数名为:%s\n 函数类型:%s\n", classSymbol, methodName, args));
         }
 
-        private Symbol.ClassSymbol getClassSymbol(Class<?> clazz)
-        {
-            Name name = names.fromString(clazz.getName());
-            Symbol.ClassSymbol classSymbol;
-            if (JDK.is9orLater())
-            {
-                classSymbol = ReflectUtil.invokeMethod(symtab, "getClass", Arrays.asList(moduleSymbol, name));
-                if (classSymbol == null)
-                {
-                    //classSymbol = ReflectUtil.invokeMethod(javaCompiler, "resolveIdent", Arrays.asList(moduleSymbol, clazz.getName()));
-                    classSymbol = classReader.enterClass(name);
-                }
-            }
-            else
-            {
-                classSymbol = ReflectUtil.<Map<Name, Symbol.ClassSymbol>>getFieldValue(symtab, "classes").get(name);
-                if (classSymbol == null)
-                {
-                    classSymbol = classReader.enterClass(name);
-                }
-            }
-            return classSymbol;
-        }
-
         private Type getType(Class<?> clazz)
         {
             if (clazz.isPrimitive())
@@ -1172,6 +1189,11 @@ public class SugarScannerV2 extends TreeScanner
 
         private JCTree.JCMethodInvocation reflectMethod(Type type, String name, ListBuffer<JCTree.JCExpression> args)
         {
+            return reflectMethod(type, name, args.toList());
+        }
+
+        private JCTree.JCMethodInvocation reflectMethod(Type type, String name, List<JCTree.JCExpression> args)
+        {
             return treeMaker.App(
                     refMakeSelector(
                             treeMaker.Ident(getClassSymbol(ReflectUtil.class)),
@@ -1184,6 +1206,24 @@ public class SugarScannerV2 extends TreeScanner
                     List.of(
                             treeMaker.ClassLiteral(type),
                             treeMaker.Literal(name),
+                            makeArray(Class.class, args)
+                    )
+            );
+        }
+
+        private JCTree.JCMethodInvocation reflectConstructor(Type type, ListBuffer<JCTree.JCExpression> args)
+        {
+            return treeMaker.App(
+                    refMakeSelector(
+                            treeMaker.Ident(getClassSymbol(ReflectUtil.class)),
+                            getMethodSymbol(
+                                    ReflectUtil.class,
+                                    "getConstructor",
+                                    Arrays.asList(Class.class, Class[].class)
+                            )
+                    ),
+                    List.of(
+                            treeMaker.ClassLiteral(type),
                             makeArray(Class.class, args.toList())
                     )
             );
