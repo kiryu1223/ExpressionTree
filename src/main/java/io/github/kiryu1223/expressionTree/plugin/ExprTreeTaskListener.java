@@ -12,11 +12,13 @@ import com.sun.tools.javac.util.ListBuffer;
 import com.sun.tools.javac.util.Names;
 import io.github.kiryu1223.expressionTree.expressions.annos.Getter;
 import io.github.kiryu1223.expressionTree.expressions.annos.Setter;
+import io.github.kiryu1223.expressionTree.ext.IExtensionService;
 import io.github.kiryu1223.expressionTree.util.JDK;
 import io.github.kiryu1223.expressionTree.util.ReflectUtil;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.ServiceLoader;
 import java.util.stream.Collectors;
 
 public class ExprTreeTaskListener implements TaskListener
@@ -28,6 +30,7 @@ public class ExprTreeTaskListener implements TaskListener
     private final Symtab symtab;
     //private final JavaCompiler javaCompiler;
     private final ClassReader classReader;
+    private final List<IExtensionService> extensionServices;
 
     public ExprTreeTaskListener(Context context)
     {
@@ -40,12 +43,49 @@ public class ExprTreeTaskListener implements TaskListener
         //classReader = ClassReader.instance(context);
         //this.context = context;
         this.context = context;
+        this.extensionServices = registrarExtensionService();
+    }
+
+    // 注册我的服务
+    private List<IExtensionService> registrarExtensionService()
+    {
+        ServiceLoader<IExtensionService> load = ServiceLoader.load(IExtensionService.class, ExprTreeTaskListener.class.getClassLoader());
+        List<IExtensionService> iExtensionServices = new ArrayList<>();
+        for (IExtensionService iExtensionService : load)
+        {
+            iExtensionServices.add(iExtensionService);
+        }
+        return iExtensionServices;
+    }
+
+    private void startedCallExtensionServices(TaskEvent event) throws Throwable
+    {
+        for (IExtensionService extensionService : extensionServices)
+        {
+            extensionService.started(event);
+        }
+    }
+
+    private void finishedCallExtensionServices(TaskEvent event) throws Throwable
+    {
+        for (IExtensionService extensionService : extensionServices)
+        {
+            extensionService.finished(event);
+        }
     }
 
     @Override
     public void started(TaskEvent event)
     {
         //System.out.printf("%s 开始 %n", event.getKind());
+        try
+        {
+            startedCallExtensionServices(event);
+        }
+        catch (Throwable e)
+        {
+            throw new RuntimeException(e);
+        }
     }
 
     @Override
@@ -57,6 +97,8 @@ public class ExprTreeTaskListener implements TaskListener
             getterOrSetter(event);
             blockTaskMake(event);
             lambdaToTree(event);
+
+            finishedCallExtensionServices(event);
         }
         catch (Throwable e)
         {

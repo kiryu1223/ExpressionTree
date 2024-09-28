@@ -6,7 +6,7 @@
 
     <groupId>io.github.kiryu1223</groupId>
     <artifactId>ExpressionTree</artifactId>
-    <version>1.4.3</version>
+    <version>1.4.4</version>
 
     <name>ExpressionTree</name>
     <description>java static expressionTree</description>
@@ -153,6 +153,7 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.8.1</version>
                 <configuration>
+                    <parameters>true</parameters>
                     <compilerArguments>
                         <bootclasspath>
                             ${java.home}/lib/rt.jar${path.separator}${java.home}/lib/jce.jar${path.separator}${java.home}/../lib/tools.jar
