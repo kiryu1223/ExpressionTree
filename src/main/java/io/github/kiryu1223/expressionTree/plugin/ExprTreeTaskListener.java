@@ -43,16 +43,17 @@ public class ExprTreeTaskListener implements TaskListener
         //classReader = ClassReader.instance(context);
         //this.context = context;
         this.context = context;
-        this.extensionServices = registrarExtensionService();
+        this.extensionServices = registrarExtensionService(context);
     }
 
     // 注册我的服务
-    private List<IExtensionService> registrarExtensionService()
+    private List<IExtensionService> registrarExtensionService(Context context)
     {
         ServiceLoader<IExtensionService> load = ServiceLoader.load(IExtensionService.class, ExprTreeTaskListener.class.getClassLoader());
         List<IExtensionService> iExtensionServices = new ArrayList<>();
         for (IExtensionService iExtensionService : load)
         {
+            iExtensionService.init(context);
             iExtensionServices.add(iExtensionService);
         }
         return iExtensionServices;
