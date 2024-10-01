@@ -1,4 +1,4 @@
-package io.github.kiryu1223.expressionTree.expressions;
+package io.github.kiryu1223.expressionTree.expressions.annos;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;

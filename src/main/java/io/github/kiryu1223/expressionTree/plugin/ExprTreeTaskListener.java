@@ -31,6 +31,7 @@ public class ExprTreeTaskListener implements TaskListener
     //private final JavaCompiler javaCompiler;
     private final ClassReader classReader;
     private final List<IExtensionService> extensionServices;
+    //private final String[] compilerArgs;
 
     public ExprTreeTaskListener(Context context)
     {
@@ -44,6 +45,7 @@ public class ExprTreeTaskListener implements TaskListener
         //this.context = context;
         this.context = context;
         this.extensionServices = registrarExtensionService(context);
+        //this.compilerArgs = compilerArgs;
     }
 
     // 注册我的服务

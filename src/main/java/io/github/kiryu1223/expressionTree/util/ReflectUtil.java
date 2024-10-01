@@ -1,5 +1,7 @@
 package io.github.kiryu1223.expressionTree.util;
 
+import io.github.kiryu1223.expressionTree.expressions.annos.Recode;
+
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
@@ -14,7 +16,7 @@ public class ReflectUtil
     private final static Map<Class<?>, Map<String, Field>> fieldCache = new ConcurrentHashMap<>();
     private final static Map<Class<?>, Map<String, Map<Class<?>[], Method>>> methodCache = new ConcurrentHashMap<>();
 
-    public static Field getField(Class<?> clazz, String name)
+    public static Field getField(@Recode Class<?> clazz, String name)
     {
         try
         {
@@ -37,7 +39,7 @@ public class ReflectUtil
         }
     }
 
-    public static Method getMethod(Class<?> clazz, String name, Class<?>[] classes)
+    public static Method getMethod(@Recode Class<?> clazz, String name, Class<?>[] classes)
     {
         try
         {
@@ -69,7 +71,7 @@ public class ReflectUtil
         }
     }
 
-    public static Constructor<?> getConstructor(Class<?> clazz, Class<?>[] parameterTypes)
+    public static Constructor<?> getConstructor(@Recode Class<?> clazz, Class<?>[] parameterTypes)
     {
         try
         {
