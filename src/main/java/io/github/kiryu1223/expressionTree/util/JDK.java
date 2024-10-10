@@ -31,7 +31,7 @@ public class JDK
             }
             catch (NoSuchFieldException | ClassNotFoundException e)
             {
-                throw new RuntimeException(e);
+                // 把屎兜住
             }
         }
     }

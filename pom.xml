@@ -71,7 +71,7 @@
                     <plugin>
                         <groupId>org.sonatype.plugins</groupId>
                         <artifactId>nexus-staging-maven-plugin</artifactId>
-                        <version>1.6.7</version>
+                        <version>1.6.7}</version>
                         <extensions>true</extensions>
                         <configuration>
                             <!-- 这里的id必须要和全局配置中的server一致 -->

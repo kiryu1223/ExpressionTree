@@ -1,5 +1,7 @@
 # ExpressionTree
 
+![Maven Central Version](https://img.shields.io/maven-central/v/io.github.kiryu1223/ExpressionTree)
+
 qq交流群：497125166
 
 支持jdk8至21
@@ -31,7 +33,7 @@ jdk15后的版本(**不包括jdk15**)因为封装规则的修改，需要往项�
 <dependency>
   <groupId>io.github.kiryu1223</groupId>
   <artifactId>ExpressionTree</artifactId>
-  <version>1.3.9</version>
+  <version>${project.version}</version>
 </dependency>
 ```
 
