@@ -54,9 +54,9 @@ jdk15后的版本(**不包括jdk15**)因为封装规则的修改，需要往项�
                 </compilerArgs>
                 <annotationProcessorPaths>
                     <path>
-                        <groupId>com.easy-query</groupId>
-                        <artifactId>sql-api-lambda</artifactId>
-                        <version>2.0.31</version>
+                      <groupId>io.github.kiryu1223</groupId>
+                      <artifactId>ExpressionTree</artifactId>
+                      <version>${project.version}</version>
                     </path>
                     <!-- 你的其他注解处理器，比如说lombok -->
                 </annotationProcessorPaths>
