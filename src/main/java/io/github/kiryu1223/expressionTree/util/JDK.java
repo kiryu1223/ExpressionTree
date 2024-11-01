@@ -65,6 +65,11 @@ public class JDK
         return Version >= 9;
     }
 
+    public static boolean is11orLater()
+    {
+        return Version >= 11;
+    }
+
     public static boolean is17orLater()
     {
         return Version >= 17;

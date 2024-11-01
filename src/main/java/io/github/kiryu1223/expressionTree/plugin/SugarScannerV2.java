@@ -176,7 +176,8 @@ public class SugarScannerV2 extends TreeScanner
             if (classSymbol == null)
             {
                 //classSymbol = ReflectUtil.invokeMethod(javaCompiler, "resolveIdent", Arrays.asList(moduleSymbol, clazz.getName()));
-                classSymbol = classReader.enterClass(name);
+                //classSymbol = classReader.enterClass(name);
+                classSymbol = ReflectUtil.invokeMethod(classReader, "enterClass", Collections.singletonList(name));
             }
         }
         else
