@@ -172,13 +172,14 @@ public class SugarScannerV2 extends TreeScanner
         }
         else if (JDK.is9orLater())
         {
-            classSymbol = ReflectUtil.invokeMethod(symtab, "getClass", Arrays.asList(moduleSymbol, name));
-            if (classSymbol == null)
-            {
-                //classSymbol = ReflectUtil.invokeMethod(javaCompiler, "resolveIdent", Arrays.asList(moduleSymbol, clazz.getName()));
-                //classSymbol = classReader.enterClass(name);
-                classSymbol = ReflectUtil.invokeMethod(classReader, "enterClass", Collections.singletonList(name));
-            }
+//            classSymbol = ReflectUtil.invokeMethod(symtab, "getClass", Arrays.asList(moduleSymbol, name));
+//            if (classSymbol == null)
+//            {
+//                //classSymbol = ReflectUtil.invokeMethod(javaCompiler, "resolveIdent", Arrays.asList(moduleSymbol, clazz.getName()));
+//                //classSymbol = classReader.enterClass(name);
+//                classSymbol = ReflectUtil.invokeMethod(classReader, "enterClass", Collections.singletonList(name));
+//            }
+            classSymbol = ReflectUtil.invokeMethod(symtab, "enterClass", Arrays.asList(moduleSymbol, name));
         }
         else
         {
