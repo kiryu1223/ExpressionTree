@@ -86,11 +86,6 @@ public class SugarScannerV2 extends TreeScanner
     public void visitClassDef(JCTree.JCClassDecl classDecl)
     {
         thiz = classDecl.sym;
-//        for (JCTree member : classDecl.getMembers())
-//        {
-//            System.out.println(member.getClass());
-//            System.out.println(member);
-//        }
         super.visitClassDef(classDecl);
     }
 

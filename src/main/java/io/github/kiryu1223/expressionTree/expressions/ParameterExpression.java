@@ -1,5 +1,7 @@
 package io.github.kiryu1223.expressionTree.expressions;
 
+import java.util.Objects;
+
 public class ParameterExpression extends Expression
 {
     private final Class<?> type;
