@@ -1,7 +1,7 @@
 package io.github.kiryu1223.expressionTree.plugin;
 
 import com.sun.source.tree.LambdaExpressionTree;
-import com.sun.source.tree.Tree;
+import com.sun.source.tree.VariableTree;
 import com.sun.tools.javac.code.Symbol;
 import com.sun.tools.javac.code.Symtab;
 import com.sun.tools.javac.code.Type;
@@ -9,7 +9,7 @@ import com.sun.tools.javac.code.Types;
 import com.sun.tools.javac.jvm.ClassReader;
 import com.sun.tools.javac.tree.JCTree;
 import com.sun.tools.javac.tree.TreeMaker;
-import com.sun.tools.javac.tree.TreeScanner;
+import com.sun.tools.javac.tree.TreeTranslator;
 import com.sun.tools.javac.util.List;
 import com.sun.tools.javac.util.ListBuffer;
 import com.sun.tools.javac.util.Name;
@@ -22,12 +22,11 @@ import io.github.kiryu1223.expressionTree.util.ReflectUtil;
 import javax.lang.model.element.ElementKind;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 import java.util.*;
 
 import static io.github.kiryu1223.expressionTree.expressions.Kind.*;
 
-public class LambdaTreeScanner extends TreeScanner
+public class LambdaTreeScanner extends TreeTranslator
 {
     private final TreeMaker treeMaker;
     private final Types types;
@@ -37,6 +36,8 @@ public class LambdaTreeScanner extends TreeScanner
     private final Object moduleSymbol;
     private final ArrayDeque<Symbol> thizDeque = new ArrayDeque<>();
     private final ArrayDeque<Symbol> ownerDeque = new ArrayDeque<>();
+    private final ArrayDeque<Symbol.MethodSymbol> methodSymbolDeque = new ArrayDeque<>();
+    private final ArrayDeque<ListBuffer<JCTree.JCStatement>> statementsDeque = new ArrayDeque<>();
 
     public LambdaTreeScanner(TreeMaker treeMaker, Types types, Names names, Symtab symtab, ClassReader classReader, Object moduleSymbol)
     {
@@ -69,13 +70,19 @@ public class LambdaTreeScanner extends TreeScanner
     {
         if (!tree.isStatic() && !ownerDeque.isEmpty())
         {
-            ListBuffer<JCTree.JCStatement> news = new ListBuffer<>();
-            for (JCTree.JCStatement statement : tree.getStatements())
+            ListBuffer<JCTree.JCStatement> statements = new ListBuffer<>();
+            statementsDeque.push(statements);
+            for (JCTree.JCStatement stat : tree.stats)
             {
-                scan(statement);
-                news.add(statement);
+                statements.add(translate(stat));
             }
-            tree.stats = news.toList();
+            statementsDeque.pop();
+            tree.stats = statements.toList();
+            result = tree;
+        }
+        else
+        {
+            super.visitBlock(tree);
         }
     }
 
@@ -83,36 +90,55 @@ public class LambdaTreeScanner extends TreeScanner
     public void visitApply(JCTree.JCMethodInvocation tree)
     {
         Symbol.MethodSymbol methodSymbol = methodInvocationGetMethodSymbol(tree);
-        List<Symbol.VarSymbol> varSymbols = methodSymbol.getParameters();
-        List<JCTree.JCExpression> parameters = tree.getArguments();
+        methodSymbolDeque.push(methodSymbol);
+        tree.meth = translate(tree.meth);
         ListBuffer<JCTree.JCExpression> args = new ListBuffer<>();
-        for (int i = 0; i < varSymbols.size(); i++)
+        List<JCTree.JCExpression> jcExpressions = tree.args;
+        for (int i = 0; i < jcExpressions.size(); i++)
         {
-            Symbol.VarSymbol varSymbol = varSymbols.get(i);
-            JCTree.JCExpression parameter = parameters.get(i);
-            Expr expr = varSymbol.getAnnotation(Expr.class);
-            // 没注解说明不是
-            if (expr == null)
-            {
-                args.add(parameter);
-                continue;
-            }
-            // 检查是不是lambda表达式
-            if (!(parameter instanceof JCTree.JCLambda))
-            {
-                throw new RuntimeException(String.format("%s的第%d个参数期望为lambda表达式，目前为%s", methodSymbol, i, parameter));
-            }
-            JCTree.JCLambda jcLambda = (JCTree.JCLambda) parameter;
-            LambdaExpressionTree.BodyKind bodyKind = jcLambda.getBodyKind();
-            // 检查表达式体约束
-            if ((expr.value() == Expr.BodyType.Expr && bodyKind == LambdaExpressionTree.BodyKind.STATEMENT)
-                    || (expr.value() == Expr.BodyType.Block && bodyKind == LambdaExpressionTree.BodyKind.EXPRESSION))
-            {
-                throw new RuntimeException(String.format("期望的lambda类型为:%s,实际为:%s\n%s", expr.value() == Expr.BodyType.Expr ? "表达式" : "代码块", expr.value() == Expr.BodyType.Expr ? "代码块" : "表达式", tree));
-            }
-            //
-            JCTree.JCExpression built = doMakeExpression(jcLambda);
+            JCTree.JCExpression arg = jcExpressions.get(i);
+            argIndex = i;
+            args.add(translate(arg));
         }
+        tree.args = args.toList();
+        result = tree;
+        methodSymbolDeque.pop();
+    }
+
+    private int argIndex = 0;
+    private final Map<Name, JCTree.JCVariableDecl> lambdaVarDeque = new HashMap();
+
+    @Override
+    public void visitLambda(JCTree.JCLambda tree)
+    {
+        Symbol.MethodSymbol methodSymbol = methodSymbolDeque.peek();
+        if (methodSymbol == null)
+        {
+            super.visitLambda(tree);
+            return;
+        }
+        Symbol.VarSymbol varSymbol = methodSymbol.getParameters().get(argIndex);
+        Expr expr = varSymbol.getAnnotation(Expr.class);
+        // 没有注解说明不是表达式
+        if (expr == null)
+        {
+            super.visitLambda(tree);
+            return;
+        }
+        // 检查lambda类型
+        checkBody(expr.value(), tree.getBodyKind(), methodSymbol);
+        // 收集lambda参数
+        for (JCTree.JCVariableDecl param : tree.params)
+        {
+            lambdaVarDeque.put(param.name, param);
+        }
+        JCTree expression = deepMake(tree.getBody());
+        // 归还参数
+        for (JCTree.JCVariableDecl param : tree.params)
+        {
+            lambdaVarDeque.remove(param.name);
+        }
+        result = expression;
     }
 
     private Symbol.MethodSymbol methodInvocationGetMethodSymbol(JCTree.JCMethodInvocation tree)
@@ -132,7 +158,228 @@ public class LambdaTreeScanner extends TreeScanner
         return methodSymbol;
     }
 
-    private JCTree.JCExpression doMakeExpression(JCTree tree)
+    private void checkBody(Expr.BodyType value, LambdaExpressionTree.BodyKind bodyKind, Symbol.MethodSymbol methodSymbol)
+    {
+        if ((value == Expr.BodyType.Expr && bodyKind == LambdaExpressionTree.BodyKind.STATEMENT)
+                || (value == Expr.BodyType.Block && bodyKind == LambdaExpressionTree.BodyKind.EXPRESSION))
+        {
+            throw new RuntimeException(String.format("期望的lambda类型为: %s,实际为: %s\n%s", value == Expr.BodyType.Expr ? "表达式" : "代码块", value == Expr.BodyType.Expr ? "代码块" : "表达式", methodSymbol));
+        }
+    }
+
+    private Type getType(Class<?> clazz)
+    {
+        if (clazz.isPrimitive())
+        {
+            if (clazz == int.class) return symtab.intType;
+            if (clazz == byte.class) return symtab.byteType;
+            if (clazz == short.class) return symtab.shortType;
+            if (clazz == long.class) return symtab.longType;
+            if (clazz == boolean.class) return symtab.booleanType;
+            if (clazz == char.class) return symtab.charType;
+            if (clazz == float.class) return symtab.floatType;
+            if (clazz == double.class) return symtab.doubleType;
+            if (clazz == void.class) return symtab.voidType;
+        }
+        return getClassSymbol(clazz).asType();
+    }
+
+    private JCTree.JCFieldAccess getFactoryMethod(Kind methodType, java.util.List<Class<?>> argTypes)
+    {
+        ListBuffer<Type> typeListBuffer = new ListBuffer<>();
+        for (Class<?> as : argTypes)
+        {
+            typeListBuffer.append(getType(as));
+        }
+        return getFactoryMethod(methodType, typeListBuffer.toList());
+    }
+
+    private JCTree.JCFieldAccess getFactoryMethod(Kind methodType, List<Type> argTypes)
+    {
+        Name name = names.fromString(methodType.name());
+//        ListBuffer<Type> argTypes = new ListBuffer<>();
+//        for (Class<?> as : args)
+//        {
+//            if (as.isArray())
+//            {
+//                Class<?> componentType = as.getComponentType();
+//                Type.ArrayType arrayType = types.makeArrayType(getType(componentType));
+//                argTypes.append(arrayType);
+//            }
+//            else
+//            {
+//                argTypes.append(getType(as));
+//            }
+//        }
+        Symbol.ClassSymbol classSymbol = getClassSymbol(Expression.class);
+        Symbol.MethodSymbol methodSymbol = null;
+        for (Symbol enclosedElement : classSymbol.getEnclosedElements())
+        {
+            if (!(enclosedElement instanceof Symbol.MethodSymbol)) continue;
+            Symbol.MethodSymbol element = (Symbol.MethodSymbol) enclosedElement;
+            if (!element.getSimpleName().equals(name)) continue;
+            List<Symbol.VarSymbol> parameters = element.getParameters();
+            if (parameters.isEmpty() && argTypes.isEmpty())
+            {
+                methodSymbol = element;
+                break;
+            }
+            if (parameters.size() != argTypes.size()) continue;
+            ListBuffer<Type> vars = new ListBuffer<>();
+            for (Symbol.VarSymbol parameter : parameters)
+            {
+                vars.append(parameter.asType());
+            }
+            if (!types.isSubtypes(argTypes, vars.toList())) continue;
+            methodSymbol = element;
+        }
+        if (methodSymbol != null)
+        {
+            return refMakeSelector(treeMaker.Ident(classSymbol), methodSymbol);
+        }
+        throw new RuntimeException(String.format("getFactoryMethod方法无法获取到函数\n 函数名为:%s\n 参数类型为:%s\n", methodType, argTypes));
+    }
+
+    private JCTree.JCFieldAccess refMakeSelector(JCTree.JCExpression base, Symbol sym)
+    {
+        return ReflectUtil.invokeMethod(treeMaker, "Select", Arrays.asList(base, sym));
+    }
+
+    private JCTree.JCFieldAccess getOperator(JCTree.Tag tag)
+    {
+        return getOperator(tag.name());
+    }
+
+    private JCTree.JCFieldAccess getOperator(OperatorType operatorType)
+    {
+        return getOperator(operatorType.name());
+    }
+
+    private JCTree.JCFieldAccess getOperator(String op)
+    {
+        Symbol.ClassSymbol classSymbol = getClassSymbol(OperatorType.class);
+        for (Symbol enclosedElement : classSymbol.getEnclosedElements())
+        {
+            if (enclosedElement.getKind() != ElementKind.ENUM_CONSTANT) continue;
+            if (!op.equals(enclosedElement.getSimpleName().toString())) continue;
+            return refMakeSelector(treeMaker.Ident(classSymbol), enclosedElement);
+        }
+        throw new RuntimeException("getOperator " + classSymbol);
+    }
+
+    private Symbol.ClassSymbol getClassSymbol(Class<?> clazz)
+    {
+        Name name = names.fromString(clazz.getName());
+        Symbol.ClassSymbol classSymbol;
+        if (JDK.is17orLater())
+        {
+            //classSymbol = ReflectUtil.invokeMethod(classReader, "enterClass", Collections.singletonList(name));
+            classSymbol = ReflectUtil.invokeMethod(symtab, "enterClass", Arrays.asList(moduleSymbol, name));
+        }
+        else if (JDK.is9orLater())
+        {
+//            classSymbol = ReflectUtil.invokeMethod(symtab, "getClass", Arrays.asList(moduleSymbol, name));
+//            if (classSymbol == null)
+//            {
+//                //classSymbol = ReflectUtil.invokeMethod(javaCompiler, "resolveIdent", Arrays.asList(moduleSymbol, clazz.getName()));
+//                //classSymbol = classReader.enterClass(name);
+//                classSymbol = ReflectUtil.invokeMethod(classReader, "enterClass", Collections.singletonList(name));
+//            }
+            classSymbol = ReflectUtil.invokeMethod(symtab, "enterClass", Arrays.asList(moduleSymbol, name));
+        }
+        else
+        {
+            classSymbol = ReflectUtil.<Map<Name, Symbol.ClassSymbol>>getFieldValue(symtab, "classes").get(name);
+            if (classSymbol == null)
+            {
+                classSymbol = classReader.enterClass(name);
+            }
+        }
+        return classSymbol;
+    }
+
+    private Symbol.MethodSymbol getMethodSymbol(Class<?> clazz, String methodName, java.util.List<Class<?>> args)
+    {
+        Name name = names.fromString(methodName);
+        ListBuffer<Type> argTypes = new ListBuffer<>();
+        for (Class<?> as : args)
+        {
+            if (as.isArray())
+            {
+                Class<?> componentType = as.getComponentType();
+                Type.ArrayType arrayType = types.makeArrayType(getType(componentType));
+                argTypes.append(arrayType);
+            }
+            else
+            {
+                argTypes.append(getType(as));
+            }
+        }
+        for (Symbol enclosedElement : getClassSymbol(clazz).getEnclosedElements())
+        {
+            if (!(enclosedElement instanceof Symbol.MethodSymbol)) continue;
+            Symbol.MethodSymbol methodSymbol = (Symbol.MethodSymbol) enclosedElement;
+            if (!methodSymbol.getSimpleName().equals(name)) continue;
+            if (methodSymbol.getParameters().size() != argTypes.size()) continue;
+            List<Symbol.VarSymbol> parameters = methodSymbol.getParameters();
+            ListBuffer<Type> vars = new ListBuffer<>();
+            for (Symbol.VarSymbol parameter : parameters)
+            {
+                Type type = parameter.asType();
+                vars.append(types.erasure(type));
+            }
+            if (!types.isSubtypes(argTypes.toList(), vars.toList())) continue;
+            return methodSymbol;
+        }
+        throw new RuntimeException(String.format("getMethodSymbol方法无法获取到函数\n 目标类为:%s\n 函数名为:%s\n 参数类型为:%s\n", clazz, methodName, args));
+    }
+
+
+    private JCTree.JCMethodInvocation reflectMethod(Type type, String name, ListBuffer<JCTree.JCExpression> args)
+    {
+        return reflectMethod(type, name, args.toList());
+    }
+
+    private JCTree.JCMethodInvocation reflectMethod(Type type, String name, List<JCTree.JCExpression> args)
+    {
+        return treeMaker.App(
+                refMakeSelector(
+                        treeMaker.Ident(getClassSymbol(ReflectUtil.class)),
+                        getMethodSymbol(
+                                ReflectUtil.class,
+                                "getMethod",
+                                Arrays.asList(Class.class, String.class, Class[].class)
+                        )
+                ),
+                List.of(
+                        treeMaker.ClassLiteral(type),
+                        treeMaker.Literal(name),
+                        makeArray(Class.class, args)
+                )
+        );
+    }
+
+    private JCTree.JCMethodInvocation reflectField(Type type, String name)
+    {
+        return treeMaker.App(
+                refMakeSelector(
+                        treeMaker.Ident(getClassSymbol(ReflectUtil.class)),
+                        getMethodSymbol(ReflectUtil.class, "getField", Arrays.asList(Class.class, String.class))
+                ),
+                List.of(
+                        treeMaker.ClassLiteral(type),
+                        treeMaker.Literal(name)
+                )
+        );
+    }
+
+    private JCTree.JCNewArray makeArray(Class<?> clazz, List<JCTree.JCExpression> args)
+    {
+        return (JCTree.JCNewArray) treeMaker.NewArray(treeMaker.Ident(getClassSymbol(clazz)), List.nil(), args)
+                .setType(types.makeArrayType(getType(clazz)));
+    }
+
+    private JCTree.JCExpression deepMake(JCTree tree)
     {
         if (tree instanceof JCTree.JCPrimitiveTypeTree)
         {
@@ -157,13 +404,9 @@ public class LambdaTreeScanner extends TreeScanner
                         List.of(treeMaker.ClassLiteral(jcIdent.type))
                 );
             }
-            else if (variableDeclMap.containsKey(jcIdent.getName()))
+            else if (lambdaVarDeque.containsKey(jcIdent.getName()))
             {
-                return treeMaker.Ident(variableDeclMap.get(jcIdent.getName()));
-            }
-            else if (tempVariableDeclMap.containsKey(jcIdent.getName()))
-            {
-                return treeMaker.Ident(tempVariableDeclMap.get(jcIdent.getName()));
+                return treeMaker.Ident(lambdaVarDeque.get(jcIdent.getName()));
             }
             else
             {
@@ -176,8 +419,8 @@ public class LambdaTreeScanner extends TreeScanner
         else if (tree instanceof JCTree.JCBinary)
         {
             JCTree.JCBinary jcBinary = (JCTree.JCBinary) tree;
-            JCTree.JCExpression left = doMakeExpression(jcBinary.getLeftOperand());
-            JCTree.JCExpression right = doMakeExpression(jcBinary.getRightOperand());
+            JCTree.JCExpression left = deepMake(jcBinary.getLeftOperand());
+            JCTree.JCExpression right = deepMake(jcBinary.getRightOperand());
             return treeMaker.App(
                     getFactoryMethod(Binary, Arrays.asList(Expression.class, Expression.class, OperatorType.class)),
                     List.of(left, right, getOperator(jcBinary.getTag()))
@@ -186,98 +429,26 @@ public class LambdaTreeScanner extends TreeScanner
         else if (tree instanceof JCTree.JCMethodInvocation)
         {
             JCTree.JCMethodInvocation jcMethodInvocation = (JCTree.JCMethodInvocation) tree;
-            JCTree.JCExpression methodSelect = jcMethodInvocation.getMethodSelect();
-            List<JCTree.JCExpression> arguments = jcMethodInvocation.getArguments();
-            ListBuffer<JCTree.JCExpression> args = new ListBuffer<>();
-            for (JCTree.JCExpression argument : arguments)
+            // 递归生成
+            visitApply(jcMethodInvocation);
+            ListBuffer<JCTree.JCExpression> arguments = new ListBuffer<>();
+            for (JCTree.JCExpression argument : jcMethodInvocation.getArguments())
             {
-                if (argument instanceof JCTree.JCMethodInvocation &&
-                        ((JCTree.JCMethodInvocation) argument).getArguments().size() == 2 &&
-                        ((JCTree.JCMethodInvocation) argument).getArguments().get(0).getKind() == Tree.Kind.LAMBDA_EXPRESSION &&
-                        argument.type.tsym.equals(getClassSymbol(ExprTree.class)))
-                {
-                    JCTree.JCMethodInvocation invoke = (JCTree.JCMethodInvocation) argument;
-                    JCTree.JCLambda lambda = (JCTree.JCLambda) invoke.getArguments().get(0);
-                    JCTree.JCVariableDecl variableDecl = tempLambdaMap.get(lambda);
-                    JCTree.JCExpression ag = treeMaker.Ident(variableDecl);
-                    args.append(ag);
-                }
-                else
-                {
-                    args.append(doMakeExpression(argument));
-                }
+                arguments.add(deepMake(argument));
             }
-
-            java.util.List<Class<?>> argTypes = new ArrayList<>(Arrays.asList(Expression.class, Method.class, Expression[].class));
-            ListBuffer<JCTree.JCExpression> of = new ListBuffer<>();
-
-            Symbol symbol;
-            if (methodSelect instanceof JCTree.JCIdent)
+            Symbol.MethodSymbol methodSymbol = methodInvocationGetMethodSymbol(jcMethodInvocation);
+            ListBuffer<Type> argTypes = new ListBuffer<>();
+            for (Symbol.VarSymbol parameter : methodSymbol.getParameters())
             {
-                JCTree.JCIdent select = (JCTree.JCIdent) methodSelect;
-                symbol = select.sym.location();
-                Symbol.MethodSymbol methodSymbol = getMethodSymbol(
-                        symbol,
-                        names.fromString(select.getName().toString()),
-                        methodSelect.type.asMethodType()
-                );
-                if (methodSymbol.isStatic())
-                {
-                    of.append(
-                            treeMaker.App(
-                                    getFactoryMethod(StaticClass, Collections.singletonList(Class.class)),
-                                    List.of(treeMaker.ClassLiteral(symbol.asType()))
-                            )
-                    );
-                }
-                else
-                {
-                    of.append(
-                            treeMaker.App(
-                                    getFactoryMethod(Reference, Arrays.asList(Object.class, String.class)),
-                                    List.of(treeMaker.This(thiz.type), treeMaker.Literal("this"))
-                            )
-                    );
-                }
+                argTypes.add(parameter.type);
             }
-            else
-            {
-                JCTree.JCFieldAccess select = (JCTree.JCFieldAccess) methodSelect;
-                symbol = select.sym.location();
-                of.append(doMakeExpression(select.getExpression()));
-            }
-
-            Type.MethodType methodType = methodSelect.type.asMethodType();
-            String methodName = methodSelect instanceof JCTree.JCFieldAccess
-                    ? ((JCTree.JCFieldAccess) methodSelect).getIdentifier().toString()
-                    : methodSelect.toString();
-
-            ListBuffer<JCTree.JCExpression> ts = new ListBuffer<>();
-            for (Type parameterType : methodSelect.type.asMethodType().getParameterTypes())
-            {
-                ts.add(treeMaker.ClassLiteral(parameterType));
-            }
-
-            of.append(
-                            reflectMethod(
-                                    symbol.asType(),
-                                    methodName,
-                                    ts
-                            ))
-                    .append(makeArray(Expression.class, args.toList()));
-
-            Type type = symbol.asType();
-
-            // todo：是否为扩展方法
-
             return treeMaker.App(
                     getFactoryMethod(
                             MethodCall,
-                            argTypes
+                            argTypes.toList()
                     ),
-                    of.toList()
+                    arguments.toList()
             );
-
         }
         else if (tree instanceof JCTree.JCFieldAccess)
         {
@@ -297,7 +468,7 @@ public class LambdaTreeScanner extends TreeScanner
                 return treeMaker.App(
                         getFactoryMethod(FieldSelect, Arrays.asList(Expression.class, Field.class)),
                         List.of(
-                                doMakeExpression(jcFieldAccess.getExpression()),
+                                deepMake(jcFieldAccess.getExpression()),
                                 reflectField(jcFieldAccess.getExpression().type, jcFieldAccess.getIdentifier().toString())
                         )
                 );
@@ -306,7 +477,7 @@ public class LambdaTreeScanner extends TreeScanner
         else if (tree instanceof JCTree.JCParens)
         {
             JCTree.JCParens jcParens = (JCTree.JCParens) tree;
-            JCTree.JCExpression expr = doMakeExpression(jcParens.getExpression());
+            JCTree.JCExpression expr = deepMake(jcParens.getExpression());
             return treeMaker.App(
                     getFactoryMethod(Parens, Collections.singletonList(Expression.class)),
                     List.of(expr)
@@ -318,7 +489,7 @@ public class LambdaTreeScanner extends TreeScanner
             ListBuffer<JCTree.JCExpression> args = new ListBuffer<>();
             for (JCTree.JCStatement statement : jcBlock.getStatements())
             {
-                args.append(doMakeExpression(statement));
+                args.append(deepMake(statement));
             }
             return treeMaker.App(
                     getFactoryMethod(Block, Arrays.asList(Expression[].class, boolean.class)),
@@ -331,12 +502,12 @@ public class LambdaTreeScanner extends TreeScanner
         else if (tree instanceof JCTree.JCExpressionStatement)
         {
             JCTree.JCExpressionStatement jcExpressionStatement = (JCTree.JCExpressionStatement) tree;
-            return doMakeExpression(jcExpressionStatement.getExpression());
+            return deepMake(jcExpressionStatement.getExpression());
         }
         else if (tree instanceof JCTree.JCUnary)
         {
             JCTree.JCUnary jcUnary = (JCTree.JCUnary) tree;
-            JCTree.JCExpression expr = doMakeExpression(jcUnary.getExpression());
+            JCTree.JCExpression expr = deepMake(jcUnary.getExpression());
             return treeMaker.App(
                     getFactoryMethod(Unary, Arrays.asList(Expression.class, OperatorType.class)),
                     List.of(expr, getOperator(jcUnary.getTag()))
@@ -345,8 +516,8 @@ public class LambdaTreeScanner extends TreeScanner
         else if (tree instanceof JCTree.JCAssign)
         {
             JCTree.JCAssign jcAssign = (JCTree.JCAssign) tree;
-            JCTree.JCExpression left = doMakeExpression(jcAssign.getVariable());
-            JCTree.JCExpression right = doMakeExpression(jcAssign.getExpression());
+            JCTree.JCExpression left = deepMake(jcAssign.getVariable());
+            JCTree.JCExpression right = deepMake(jcAssign.getExpression());
             return treeMaker.App(
                     getFactoryMethod(Assign, Arrays.asList(Expression.class, Expression.class)),
                     List.of(left, right)
@@ -355,8 +526,8 @@ public class LambdaTreeScanner extends TreeScanner
         else if (tree instanceof JCTree.JCAssignOp)
         {
             JCTree.JCAssignOp jcAssignOp = (JCTree.JCAssignOp) tree;
-            JCTree.JCExpression left = doMakeExpression(jcAssignOp.getVariable());
-            JCTree.JCExpression right = doMakeExpression(jcAssignOp.getExpression());
+            JCTree.JCExpression left = deepMake(jcAssignOp.getVariable());
+            JCTree.JCExpression right = deepMake(jcAssignOp.getExpression());
             return treeMaker.App(
                     getFactoryMethod(AssignOp, Arrays.asList(Expression.class, Expression.class, OperatorType.class)),
                     List.of(left, right, getOperator(jcAssignOp.getTag()))
@@ -372,7 +543,7 @@ public class LambdaTreeScanner extends TreeScanner
             args.append(treeMaker.Ident(localVar));
             if (jcVariableDecl.getInitializer() != null)
             {
-                args.append(doMakeExpression(jcVariableDecl.getInitializer()));
+                args.append(deepMake(jcVariableDecl.getInitializer()));
             }
             else
             {
@@ -386,8 +557,8 @@ public class LambdaTreeScanner extends TreeScanner
         else if (tree instanceof JCTree.JCArrayAccess)
         {
             JCTree.JCArrayAccess jcArrayAccess = (JCTree.JCArrayAccess) tree;
-            JCTree.JCExpression indexed = doMakeExpression(jcArrayAccess.getExpression());
-            JCTree.JCExpression index = doMakeExpression(jcArrayAccess.getIndex());
+            JCTree.JCExpression indexed = deepMake(jcArrayAccess.getExpression());
+            JCTree.JCExpression index = deepMake(jcArrayAccess.getIndex());
             return treeMaker.App(
                     getFactoryMethod(Index, Arrays.asList(Expression.class, Expression.class)),
                     List.of(indexed, index)
@@ -430,7 +601,7 @@ public class LambdaTreeScanner extends TreeScanner
             ListBuffer<JCTree.JCExpression> args = new ListBuffer<>();
             for (JCTree.JCExpression argument : jcNewClass.getArguments())
             {
-                args.append(doMakeExpression(argument));
+                args.append(deepMake(argument));
             }
             classes.add(Expression[].class);
             all.append(makeArray(Expression.class, args.toList()));
@@ -446,7 +617,7 @@ public class LambdaTreeScanner extends TreeScanner
                 {
                     if (!(member instanceof JCTree.JCVariableDecl)) continue;
                     JCTree.JCVariableDecl variableDecl = (JCTree.JCVariableDecl) member;
-                    JCTree.JCExpression variable = doMakeExpression(variableDecl);
+                    JCTree.JCExpression variable = deepMake(variableDecl);
                     body.add(variable);
                 }
                 all.append(treeMaker.App(
@@ -471,11 +642,11 @@ public class LambdaTreeScanner extends TreeScanner
             ListBuffer<JCTree.JCExpression> args = new ListBuffer<>();
             for (JCTree.JCExpression dimension : jcNewArray.getDimensions())
             {
-                dims.append(doMakeExpression(dimension));
+                dims.append(deepMake(dimension));
             }
             for (JCTree.JCExpression initializer : jcNewArray.getInitializers())
             {
-                args.append(doMakeExpression(initializer));
+                args.append(deepMake(initializer));
             }
             return treeMaker.App(
                     getFactoryMethod(NewArray, Arrays.asList(Class.class, Expression[].class, Expression[].class)),
@@ -489,7 +660,7 @@ public class LambdaTreeScanner extends TreeScanner
         else if (tree instanceof JCTree.JCReturn)
         {
             JCTree.JCReturn jcReturn = (JCTree.JCReturn) tree;
-            JCTree.JCExpression result = doMakeExpression(jcReturn.getExpression());
+            JCTree.JCExpression result = deepMake(jcReturn.getExpression());
             return treeMaker.App(
                     getFactoryMethod(Return, Collections.singletonList(Expression.class)),
                     List.of(result)
@@ -506,9 +677,9 @@ public class LambdaTreeScanner extends TreeScanner
         else if (tree instanceof JCTree.JCConditional)
         {
             JCTree.JCConditional jcConditional = (JCTree.JCConditional) tree;
-            JCTree.JCExpression cond = doMakeExpression(jcConditional.getCondition());
-            JCTree.JCExpression ifTrue = doMakeExpression(jcConditional.getTrueExpression());
-            JCTree.JCExpression ifFalse = doMakeExpression(jcConditional.getFalseExpression());
+            JCTree.JCExpression cond = deepMake(jcConditional.getCondition());
+            JCTree.JCExpression ifTrue = deepMake(jcConditional.getTrueExpression());
+            JCTree.JCExpression ifFalse = deepMake(jcConditional.getFalseExpression());
             return treeMaker.App(
                     getFactoryMethod(Conditional, Arrays.asList(Expression.class, Expression.class, Expression.class)),
                     List.of(cond, ifTrue, ifFalse)
@@ -518,11 +689,11 @@ public class LambdaTreeScanner extends TreeScanner
         {
             JCTree.JCIf jcIf = (JCTree.JCIf) tree;
             ListBuffer<JCTree.JCExpression> args = new ListBuffer<>();
-            JCTree.JCExpression cond = doMakeExpression(jcIf.getCondition());
+            JCTree.JCExpression cond = deepMake(jcIf.getCondition());
             args.append(cond);
             if (jcIf.getThenStatement() != null)
             {
-                JCTree.JCExpression then = doMakeExpression(jcIf.getThenStatement());
+                JCTree.JCExpression then = deepMake(jcIf.getThenStatement());
                 args.append(then);
             }
             else
@@ -531,7 +702,7 @@ public class LambdaTreeScanner extends TreeScanner
             }
             if (jcIf.getElseStatement() != null)
             {
-                JCTree.JCExpression elSe = doMakeExpression(jcIf.getElseStatement());
+                JCTree.JCExpression elSe = deepMake(jcIf.getElseStatement());
                 args.append(elSe);
             }
             else
@@ -550,12 +721,12 @@ public class LambdaTreeScanner extends TreeScanner
             ListBuffer<JCTree.JCExpression> inits = new ListBuffer<>();
             for (JCTree.JCStatement jcStatement : jcForLoop.getInitializer())
             {
-                inits.append(doMakeExpression(jcStatement));
+                inits.append(deepMake(jcStatement));
             }
             args.append(makeArray(Expression.class, inits.toList()));
             if (jcForLoop.getCondition() != null)
             {
-                args.append(doMakeExpression(jcForLoop.getCondition()));
+                args.append(deepMake(jcForLoop.getCondition()));
             }
             else
             {
@@ -564,12 +735,12 @@ public class LambdaTreeScanner extends TreeScanner
             ListBuffer<JCTree.JCExpression> steps = new ListBuffer<>();
             for (JCTree.JCExpressionStatement expressionStatement : jcForLoop.getUpdate())
             {
-                steps.append(doMakeExpression(expressionStatement));
+                steps.append(deepMake(expressionStatement));
             }
             args.append(makeArray(Expression.class, steps.toList()));
             if (jcForLoop.getStatement() != null)
             {
-                args.append(doMakeExpression(jcForLoop.getStatement()));
+                args.append(deepMake(jcForLoop.getStatement()));
             }
             else
             {
@@ -583,13 +754,13 @@ public class LambdaTreeScanner extends TreeScanner
         else if (tree instanceof JCTree.JCEnhancedForLoop)
         {
             JCTree.JCEnhancedForLoop jcEnhancedForLoop = (JCTree.JCEnhancedForLoop) tree;
-            JCTree.JCExpression var = doMakeExpression(jcEnhancedForLoop.getVariable());
-            JCTree.JCExpression expr = doMakeExpression(jcEnhancedForLoop.getExpression());
+            JCTree.JCExpression var = deepMake(jcEnhancedForLoop.getVariable());
+            JCTree.JCExpression expr = deepMake(jcEnhancedForLoop.getExpression());
             ListBuffer<JCTree.JCExpression> args = new ListBuffer<>();
             args.append(var).append(expr);
             if (jcEnhancedForLoop.getStatement() != null)
             {
-                args.append(doMakeExpression(jcEnhancedForLoop.getStatement()));
+                args.append(deepMake(jcEnhancedForLoop.getStatement()));
             }
             else
             {
@@ -604,10 +775,10 @@ public class LambdaTreeScanner extends TreeScanner
         {
             JCTree.JCWhileLoop jcWhileLoop = (JCTree.JCWhileLoop) tree;
             ListBuffer<JCTree.JCExpression> args = new ListBuffer<>();
-            args.append(doMakeExpression(jcWhileLoop.getCondition()));
+            args.append(deepMake(jcWhileLoop.getCondition()));
             if (jcWhileLoop.getStatement() != null)
             {
-                args.append(doMakeExpression(jcWhileLoop.getStatement()));
+                args.append(deepMake(jcWhileLoop.getStatement()));
             }
             else
             {
@@ -621,11 +792,11 @@ public class LambdaTreeScanner extends TreeScanner
         else if (tree instanceof JCTree.JCSwitch)
         {
             JCTree.JCSwitch jcSwitch = (JCTree.JCSwitch) tree;
-            JCTree.JCExpression selector = doMakeExpression(jcSwitch.getExpression());
+            JCTree.JCExpression selector = deepMake(jcSwitch.getExpression());
             ListBuffer<JCTree.JCExpression> cases = new ListBuffer<>();
             for (JCTree.JCCase aCase : jcSwitch.getCases())
             {
-                cases.append(doMakeExpression(aCase));
+                cases.append(deepMake(aCase));
             }
             return treeMaker.App(
                     getFactoryMethod(Switch, Arrays.asList(Expression.class, CaseExpression[].class)),
@@ -638,11 +809,11 @@ public class LambdaTreeScanner extends TreeScanner
         else if (tree instanceof JCTree.JCCase)
         {
             JCTree.JCCase jcCase = (JCTree.JCCase) tree;
-            JCTree.JCExpression part = doMakeExpression(jcCase.getExpression());
+            JCTree.JCExpression part = deepMake(jcCase.getExpression());
             ListBuffer<JCTree.JCExpression> stats = new ListBuffer<>();
             for (JCTree.JCStatement statement : jcCase.getStatements())
             {
-                stats.append(doMakeExpression(statement));
+                stats.append(deepMake(statement));
             }
             return treeMaker.App(
                     getFactoryMethod(Case, Arrays.asList(Expression.class, Expression[].class)),
@@ -656,16 +827,16 @@ public class LambdaTreeScanner extends TreeScanner
         {
             JCTree.JCTry jcTry = (JCTree.JCTry) tree;
             ListBuffer<JCTree.JCExpression> args = new ListBuffer<>();
-            args.append(doMakeExpression(jcTry.getBlock()));
+            args.append(deepMake(jcTry.getBlock()));
             ListBuffer<JCTree.JCExpression> catches = new ListBuffer<>();
             for (JCTree.JCCatch aCatch : jcTry.getCatches())
             {
-                catches.append(doMakeExpression(aCatch));
+                catches.append(deepMake(aCatch));
             }
             args.append(makeArray(CatchExpression.class, catches.toList()));
             if (jcTry.getFinallyBlock() != null)
             {
-                args.append(doMakeExpression(jcTry.getFinallyBlock()));
+                args.append(deepMake(jcTry.getFinallyBlock()));
             }
             else
             {
@@ -674,7 +845,7 @@ public class LambdaTreeScanner extends TreeScanner
             ListBuffer<JCTree.JCExpression> resources = new ListBuffer<>();
             for (JCTree resource : jcTry.getResources())
             {
-                resources.append(doMakeExpression(resource));
+                resources.append(deepMake(resource));
             }
             args.append(makeArray(Expression.class, resources.toList()));
             return treeMaker.App(
@@ -685,8 +856,8 @@ public class LambdaTreeScanner extends TreeScanner
         else if (tree instanceof JCTree.JCCatch)
         {
             JCTree.JCCatch jcCatch = (JCTree.JCCatch) tree;
-            JCTree.JCExpression param = doMakeExpression(jcCatch.getParameter());
-            JCTree.JCExpression body = doMakeExpression(jcCatch.getBlock());
+            JCTree.JCExpression param = deepMake(jcCatch.getParameter());
+            JCTree.JCExpression body = deepMake(jcCatch.getBlock());
             return treeMaker.App(
                     getFactoryMethod(Catch, Arrays.asList(VariableExpression.class, BlockExpression.class)),
                     List.of(param, body)
@@ -695,7 +866,7 @@ public class LambdaTreeScanner extends TreeScanner
         else if (tree instanceof JCTree.JCThrow)
         {
             JCTree.JCThrow jcThrow = (JCTree.JCThrow) tree;
-            JCTree.JCExpression expr = doMakeExpression(jcThrow.getExpression());
+            JCTree.JCExpression expr = deepMake(jcThrow.getExpression());
             return treeMaker.App(
                     getFactoryMethod(Throw, Collections.singletonList(Expression.class)),
                     List.of(expr)
@@ -704,112 +875,48 @@ public class LambdaTreeScanner extends TreeScanner
         else if (tree instanceof JCTree.JCTypeCast)
         {
             JCTree.JCTypeCast jcTypeCast = (JCTree.JCTypeCast) tree;
-            JCTree.JCExpression target = doMakeExpression(jcTypeCast.getType());
-            JCTree.JCExpression expr = doMakeExpression(jcTypeCast.getExpression());
+            JCTree.JCExpression target = deepMake(jcTypeCast.getType());
+            JCTree.JCExpression expr = deepMake(jcTypeCast.getExpression());
             return treeMaker.App(
                     getFactoryMethod(TypeCast, Arrays.asList(Class.class, Expression.class)),
                     List.of(target, expr)
             );
         }
-        throw new RuntimeException("不支持的类型:" + tree.type + "\n" + tree);
-    }
-
-    private JCTree.JCFieldAccess getFactoryMethod(Kind methodType, java.util.List<Class<?>> args)
-    {
-        Name name = names.fromString(methodType.name());
-        ListBuffer<Type> argTypes = new ListBuffer<>();
-        for (Class<?> as : args)
+        else if (tree instanceof JCTree.JCLambda)
         {
-            if (as.isArray())
+            JCTree.JCLambda lambda = (JCTree.JCLambda) tree;
+            JCTree.JCVariableDecl localLambdaExpr;
+            if (tempLambdaMap.containsKey(lambda))
             {
-                Class<?> componentType = as.getComponentType();
-                Type.ArrayType arrayType = types.makeArrayType(getType(componentType));
-                argTypes.append(arrayType);
+                localLambdaExpr = tempLambdaMap.get(lambda);
             }
             else
             {
-                argTypes.append(getType(as));
+                Type.MethodType methodType = (Type.MethodType) types.findDescriptorType(lambda.type);
+                Type returnType = methodType.getReturnType();
+                ListBuffer<JCTree.JCExpression> args = new ListBuffer<>();
+                for (VariableTree variableTree : lambda.getParameters())
+                {
+                    JCTree.JCVariableDecl jcVariableDecl = (JCTree.JCVariableDecl) variableTree;
+                    JCTree.JCVariableDecl localVar = getLocalVar(jcVariableDecl.type, jcVariableDecl.getName().toString());
+                    args.append(treeMaker.Ident(localVar));
+                    variableDeclMap.put(jcVariableDecl.getName(), localVar);
+                    jcStatements.append(localVar);
+                }
+                JCTree.JCExpression body = deepMake(lambda.getBody());
+//                    System.out.println(lambda.type);
+//                    System.out.println(returnType);
+                localLambdaExpr = getLocalLambdaExpr(
+                        body,
+                        args,
+                        returnType,
+                        lambda.type
+                );
+                jcStatements.append(localLambdaExpr);
+                tempLambdaMap.put(lambda, localLambdaExpr);
             }
+            return treeMaker.Ident(localLambdaExpr);
         }
-        Symbol.ClassSymbol classSymbol = getClassSymbol(Expression.class);
-        Symbol.MethodSymbol methodSymbol = null;
-        for (Symbol enclosedElement : classSymbol.getEnclosedElements())
-        {
-            if (!(enclosedElement instanceof Symbol.MethodSymbol)) continue;
-            Symbol.MethodSymbol element = (Symbol.MethodSymbol) enclosedElement;
-            if (!element.getSimpleName().equals(name)) continue;
-            List<Symbol.VarSymbol> parameters = element.getParameters();
-            if (parameters.isEmpty() && args.isEmpty())
-            {
-                methodSymbol = element;
-                break;
-            }
-            if (parameters.size() != args.size()) continue;
-            ListBuffer<Type> vars = new ListBuffer<>();
-            for (Symbol.VarSymbol parameter : parameters)
-            {
-                vars.append(parameter.asType());
-            }
-            if (!types.isSubtypes(argTypes.toList(), vars.toList())) continue;
-            methodSymbol = element;
-        }
-        if (methodSymbol != null)
-        {
-            return refMakeSelector(treeMaker.Ident(classSymbol), methodSymbol);
-        }
-        throw new RuntimeException(String.format("getFactoryMethod方法无法获取到函数\n 函数名为:%s\n 参数类型为:%s\n", methodType, args));
-    }
-
-    private Symbol.ClassSymbol getClassSymbol(Class<?> clazz)
-    {
-        Name name = names.fromString(clazz.getName());
-        Symbol.ClassSymbol classSymbol;
-        if (JDK.is17orLater())
-        {
-            //classSymbol = ReflectUtil.invokeMethod(classReader, "enterClass", Collections.singletonList(name));
-            classSymbol = ReflectUtil.invokeMethod(symtab, "enterClass", Arrays.asList(moduleSymbol, name));
-        }
-        else if (JDK.is9orLater())
-        {
-//            classSymbol = ReflectUtil.invokeMethod(symtab, "getClass", Arrays.asList(moduleSymbol, name));
-//            if (classSymbol == null)
-//            {
-//                //classSymbol = ReflectUtil.invokeMethod(javaCompiler, "resolveIdent", Arrays.asList(moduleSymbol, clazz.getName()));
-//                //classSymbol = classReader.enterClass(name);
-//                classSymbol = ReflectUtil.invokeMethod(classReader, "enterClass", Collections.singletonList(name));
-//            }
-            classSymbol = ReflectUtil.invokeMethod(symtab, "enterClass", Arrays.asList(moduleSymbol, name));
-        }
-        else
-        {
-            classSymbol = ReflectUtil.<Map<Name, Symbol.ClassSymbol>>getFieldValue(symtab, "classes").get(name);
-            if (classSymbol == null)
-            {
-                classSymbol = classReader.enterClass(name);
-            }
-        }
-        return classSymbol;
-    }
-
-    private Type getType(Class<?> clazz)
-    {
-        if (clazz.isPrimitive())
-        {
-            if (clazz == int.class) return symtab.intType;
-            if (clazz == byte.class) return symtab.byteType;
-            if (clazz == short.class) return symtab.shortType;
-            if (clazz == long.class) return symtab.longType;
-            if (clazz == boolean.class) return symtab.booleanType;
-            if (clazz == char.class) return symtab.charType;
-            if (clazz == float.class) return symtab.floatType;
-            if (clazz == double.class) return symtab.doubleType;
-            if (clazz == void.class) return symtab.voidType;
-        }
-        return getClassSymbol(clazz).asType();
-    }
-
-    private JCTree.JCFieldAccess refMakeSelector(JCTree.JCExpression base, Symbol sym)
-    {
-        return ReflectUtil.invokeMethod(treeMaker, "Select", Arrays.asList(base, sym));
+        throw new RuntimeException("不支持的类型:" + tree.type + "\n" + tree);
     }
 }

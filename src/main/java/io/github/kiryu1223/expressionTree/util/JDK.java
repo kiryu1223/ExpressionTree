@@ -1,5 +1,6 @@
 package io.github.kiryu1223.expressionTree.util;
 
+import io.github.kiryu1223.expressionTree.delegate.Action1;
 import sun.misc.Unsafe;
 
 import java.lang.reflect.Field;
