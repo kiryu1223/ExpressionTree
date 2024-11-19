@@ -467,8 +467,6 @@ public class SugarScannerV2 extends TreeScanner
                                 ))
                         .append(makeArray(Expression.class, args.toList()));
 
-                Type type = symbol.asType();
-
                 // todo：是否为扩展方法
 
                 return treeMaker.App(
