@@ -62,7 +62,6 @@ public class LambdaTreeScanner extends TreeTranslator
         ownerDeque.push(tree.sym);
         super.visitMethodDef(tree);
         ownerDeque.pop();
-        System.out.println(tree);
     }
 
     @Override
@@ -93,6 +92,7 @@ public class LambdaTreeScanner extends TreeTranslator
         methodSymbolDeque.push(methodSymbol);
         ListBuffer<JCTree.JCExpression> args = new ListBuffer<>();
         List<JCTree.JCExpression> jcExpressions = tree.getArguments();
+        tree.meth = translate(tree.getMethodSelect());
         for (int i = 0; i < jcExpressions.size(); i++)
         {
             JCTree.JCExpression arg = jcExpressions.get(i);
@@ -100,7 +100,6 @@ public class LambdaTreeScanner extends TreeTranslator
             args.add(translate(arg));
         }
         tree.args = args.toList();
-        tree.meth = translate(tree.getMethodSelect());
         result = tree;
         methodSymbolDeque.pop();
     }
@@ -126,23 +125,25 @@ public class LambdaTreeScanner extends TreeTranslator
         Symbol.MethodSymbol methodSymbol = methodSymbolDeque.peek();
         if (methodSymbol == null)
         {
-            super.visitLambda(tree);
             for (Name name : nameList)
             {
                 lambdaVarMap.remove(name);
             }
+            super.visitLambda(tree);
             return;
         }
         Symbol.VarSymbol varSymbol = methodSymbol.getParameters().get(argIndex);
+        System.out.println(varSymbol);
+        System.out.println(types.isFunctionalInterface(varSymbol.asType()));
         Expr expr = varSymbol.getAnnotation(Expr.class);
         // 没有注解说明不是表达式
         if (expr == null)
         {
-            super.visitLambda(tree);
             for (Name name : nameList)
             {
                 lambdaVarMap.remove(name);
             }
+            super.visitLambda(tree);
             return;
         }
         // 检查lambda类型
@@ -586,14 +587,34 @@ public class LambdaTreeScanner extends TreeTranslator
             JCTree.JCExpression methodSelect = jcMethodInvocation.getMethodSelect();
             List<JCTree.JCExpression> arguments = jcMethodInvocation.getArguments();
             ListBuffer<JCTree.JCExpression> args = new ListBuffer<>();
-            for (JCTree.JCExpression argument : arguments)
+            ListBuffer<JCTree.JCExpression> newArgs = new ListBuffer<>();
+            Symbol.MethodSymbol methodInvocationGetMethodSymbol = methodInvocationGetMethodSymbol(jcMethodInvocation);
+            List<Symbol.VarSymbol> parameters = methodInvocationGetMethodSymbol.getParameters();
+            for (int i = 0; i < arguments.size(); i++)
             {
+                JCTree.JCExpression argument = arguments.get(i);
+                //System.out.println(argument);
                 JCTree.JCExpression jcExpression = deepMake(argument);
-                System.out.println(argument);
-                System.out.println(jcExpression);
+                //System.out.println(jcExpression);
                 args.append(jcExpression);
+                Symbol.VarSymbol varSymbol = parameters.get(i);
+                Expr expr = varSymbol.getAnnotation(Expr.class);
+                if (argument instanceof JCTree.JCLambda && expr != null)
+                {
+                    JCTree.JCLambda jcLambda = (JCTree.JCLambda) argument;
+                    checkBody(expr.value(), jcLambda.getBodyKind(), methodInvocationGetMethodSymbol);
+                    Symbol.MethodSymbol exprSymbol = getMethodSymbol(ExprTree.class, "Expr", Arrays.asList(Delegate.class, LambdaExpression.class));
+                    JCTree.JCExpression fa = refMakeSelector(treeMaker.Ident(getClassSymbol(ExprTree.class)), exprSymbol);
+                    JCTree.JCMethodInvocation apply = treeMaker.App(fa, List.of(jcLambda, jcExpression));
+                    newArgs.add(apply);
+                }
+                else
+                {
+                    newArgs.add(argument);
+                }
             }
-            java.util.List<Class<?>> argTypes = new ArrayList<>(Arrays.asList(Expression.class, Method.class, Expression[].class));
+            jcMethodInvocation.args = newArgs.toList();
+            java.util.List<Class<?>> argTypes = Arrays.asList(Expression.class, Method.class, Expression[].class);
             ListBuffer<JCTree.JCExpression> of = new ListBuffer<>();
 
             Symbol symbol;
@@ -632,7 +653,6 @@ public class LambdaTreeScanner extends TreeTranslator
                 of.append(deepMake(select.getExpression()));
             }
 
-            Type.MethodType methodType = methodSelect.type.asMethodType();
             String methodName = methodSelect instanceof JCTree.JCFieldAccess
                     ? ((JCTree.JCFieldAccess) methodSelect).getIdentifier().toString()
                     : methodSelect.toString();
@@ -1106,9 +1126,9 @@ public class LambdaTreeScanner extends TreeTranslator
             visitLambda(lambda);
             JCTree.JCVariableDecl jcVariableDecl = lambdaCache.get(lambda);
             JCTree.JCExpression ident = treeMaker.Ident(jcVariableDecl);
-            Symbol.MethodSymbol exprSymbol = getMethodSymbol(ExprTree.class, "Expr", Arrays.asList(Delegate.class, LambdaExpression.class));
-            JCTree.JCExpression fa = refMakeSelector(treeMaker.Ident(getClassSymbol(ExprTree.class)), exprSymbol);
-            return treeMaker.App(fa, List.of(lambda, ident));
+//            Symbol.MethodSymbol exprSymbol = getMethodSymbol(ExprTree.class, "Expr", Arrays.asList(Delegate.class, LambdaExpression.class));
+//            JCTree.JCExpression fa = refMakeSelector(treeMaker.Ident(getClassSymbol(ExprTree.class)), exprSymbol);
+            return ident;
         }
         throw new RuntimeException("不支持的类型:" + tree.type + "\n" + tree);
     }
