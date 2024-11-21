@@ -9,9 +9,13 @@ import com.sun.tools.javac.tree.TreeMaker;
 import com.sun.tools.javac.tree.TreeTranslator;
 import com.sun.tools.javac.util.List;
 import com.sun.tools.javac.util.ListBuffer;
+import com.sun.tools.javac.util.Name;
 import com.sun.tools.javac.util.Names;
 
 import java.util.ArrayDeque;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class LambdaFinder extends TreeTranslator
 {
@@ -23,9 +27,9 @@ public class LambdaFinder extends TreeTranslator
     private final Object moduleSymbol;
     private final ArrayDeque<Symbol> thizDeque = new ArrayDeque<>();
     private final ArrayDeque<Symbol> ownerDeque = new ArrayDeque<>();
-    //private final ArrayDeque<Symbol.MethodSymbol> methodSymbolDeque = new ArrayDeque<>();
     private final ArrayDeque<Symbol.VarSymbol> varSymbolDeque = new ArrayDeque<>();
     private final ArrayDeque<ListBuffer<JCTree.JCStatement>> statementsDeque = new ArrayDeque<>();
+    private final AtomicInteger argIndex = new AtomicInteger();
 
     public LambdaFinder(TreeMaker treeMaker, Types types, Names names, Symtab symtab, ClassReader classReader, Object moduleSymbol)
     {
@@ -67,7 +71,6 @@ public class LambdaFinder extends TreeTranslator
             }
             statementsDeque.pop();
             tree.stats = statements.toList();
-            result = tree;
         }
         else
         {
@@ -78,11 +81,11 @@ public class LambdaFinder extends TreeTranslator
     @Override
     public void visitApply(JCTree.JCMethodInvocation tree)
     {
+        tree.meth = translate(tree.meth);
         Symbol.MethodSymbol methodSymbol = methodInvocationGetMethodSymbol(tree);
         List<Symbol.VarSymbol> parameters = methodSymbol.getParameters();
         ListBuffer<JCTree.JCExpression> args = new ListBuffer<>();
         List<JCTree.JCExpression> jcExpressions = tree.getArguments();
-        tree.meth = translate(tree.getMethodSelect());
         for (int i = 0; i < jcExpressions.size(); i++)
         {
             JCTree.JCExpression arg = jcExpressions.get(i);
@@ -100,9 +103,11 @@ public class LambdaFinder extends TreeTranslator
         if (ownerDeque.isEmpty())
         {
             super.visitLambda(tree);
-            return;
         }
+        else
+        {
 
+        }
     }
 
     private Symbol.MethodSymbol methodInvocationGetMethodSymbol(JCTree.JCMethodInvocation tree)

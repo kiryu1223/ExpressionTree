@@ -111,6 +111,24 @@ public class LambdaTreeScanner extends TreeTranslator
     @Override
     public void visitLambda(JCTree.JCLambda tree)
     {
+        Symbol.MethodSymbol methodSymbol = methodSymbolDeque.peek();
+        if (methodSymbol == null)
+        {
+            tryBoxLambda(tree);
+            super.visitLambda(tree);
+            return;
+        }
+        Symbol.VarSymbol varSymbol = methodSymbol.getParameters().get(argIndex);
+        Expr expr = varSymbol.getAnnotation(Expr.class);
+        // 没有注解说明不是表达式
+        if (expr == null)
+        {
+            tryBoxLambda(tree);
+            super.visitLambda(tree);
+            return;
+        }
+        // 检查lambda类型
+        checkBody(expr.value(), tree.getBodyKind(), methodSymbol);
         // 收集lambda参数
         ListBuffer<JCTree.JCExpression> args = new ListBuffer<>();
         ListBuffer<Name> nameList = new ListBuffer<>();
@@ -121,36 +139,7 @@ public class LambdaTreeScanner extends TreeTranslator
             args.append(treeMaker.Ident(localVar));
             lambdaVarMap.put(param.name, localVar);
             nameList.add(param.name);
-        }
-        Symbol.MethodSymbol methodSymbol = methodSymbolDeque.peek();
-        if (methodSymbol == null)
-        {
-            for (Name name : nameList)
-            {
-                lambdaVarMap.remove(name);
-            }
-            super.visitLambda(tree);
-            return;
-        }
-        Symbol.VarSymbol varSymbol = methodSymbol.getParameters().get(argIndex);
-        System.out.println(varSymbol);
-        System.out.println(types.isFunctionalInterface(varSymbol.asType()));
-        Expr expr = varSymbol.getAnnotation(Expr.class);
-        // 没有注解说明不是表达式
-        if (expr == null)
-        {
-            for (Name name : nameList)
-            {
-                lambdaVarMap.remove(name);
-            }
-            super.visitLambda(tree);
-            return;
-        }
-        // 检查lambda类型
-        checkBody(expr.value(), tree.getBodyKind(), methodSymbol);
-        for (Name name : nameList)
-        {
-            peek.add(lambdaVarMap.get(name));
+            peek.add(localVar);
         }
         JCTree.JCExpression expression = deepMake(tree.getBody());
 
@@ -175,6 +164,34 @@ public class LambdaTreeScanner extends TreeTranslator
         {
             lambdaVarMap.remove(name);
         }
+    }
+
+    private void tryBoxLambda(JCTree.JCLambda tree)
+    {
+        if (tree.getBodyKind() == LambdaExpressionTree.BodyKind.EXPRESSION)
+        {
+            JCTree.JCExpression body = (JCTree.JCExpression) tree.getBody();
+            Type lambdaReturnType = getLambdaReturnType(tree);
+            // (...) void
+            if (lambdaReturnType == symtab.voidType)
+            {
+                JCTree.JCExpressionStatement exec = treeMaker.Exec(body);
+                tree.body = treeMaker.Block(0, List.of(exec));
+            }
+            // (...) not void
+            else
+            {
+                JCTree.JCReturn aReturn = treeMaker.Return(body);
+                tree.body = treeMaker.Block(0, List.of(aReturn));
+            }
+        }
+    }
+
+    private Type getLambdaReturnType(JCTree.JCLambda lambda)
+    {
+        Type descriptorType = types.findDescriptorType(lambda.type);
+        Type.MethodType methodType = descriptorType.asMethodType();
+        return methodType.getReturnType();
     }
 
     private JCTree.JCVariableDecl getLocalLambdaExpr(JCTree.JCExpression body, ListBuffer<JCTree.JCExpression> args, Type returnType, Type gt)
@@ -593,9 +610,7 @@ public class LambdaTreeScanner extends TreeTranslator
             for (int i = 0; i < arguments.size(); i++)
             {
                 JCTree.JCExpression argument = arguments.get(i);
-                //System.out.println(argument);
                 JCTree.JCExpression jcExpression = deepMake(argument);
-                //System.out.println(jcExpression);
                 args.append(jcExpression);
                 Symbol.VarSymbol varSymbol = parameters.get(i);
                 Expr expr = varSymbol.getAnnotation(Expr.class);
