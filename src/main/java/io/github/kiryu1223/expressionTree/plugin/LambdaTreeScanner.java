@@ -34,7 +34,7 @@ public class LambdaTreeScanner extends TreeTranslator
     private final Object moduleSymbol;
     private final ArrayDeque<Symbol> thizDeque = new ArrayDeque<>();
     private final ArrayDeque<Symbol> ownerDeque = new ArrayDeque<>();
-    private final ArrayDeque<Symbol.MethodSymbol> methodSymbolDeque = new ArrayDeque<>();
+    private final ArrayDeque<Symbol.VarSymbol> varSymbolDeque = new ArrayDeque<>();
     private final ArrayDeque<ListBuffer<JCTree.JCStatement>> statementsDeque = new ArrayDeque<>();
     private int parameterIndex = 0;
 
@@ -89,36 +89,33 @@ public class LambdaTreeScanner extends TreeTranslator
     public void visitApply(JCTree.JCMethodInvocation tree)
     {
         Symbol.MethodSymbol methodSymbol = methodInvocationGetMethodSymbol(tree);
-        methodSymbolDeque.push(methodSymbol);
         ListBuffer<JCTree.JCExpression> args = new ListBuffer<>();
         List<JCTree.JCExpression> jcExpressions = tree.getArguments();
         tree.meth = translate(tree.getMethodSelect());
         for (int i = 0; i < jcExpressions.size(); i++)
         {
+            varSymbolDeque.push(methodSymbol.getParameters().get(i));
             JCTree.JCExpression arg = jcExpressions.get(i);
-            argIndex = i;
             args.add(translate(arg));
+            varSymbolDeque.pop();
         }
         tree.args = args.toList();
         result = tree;
-        methodSymbolDeque.pop();
     }
 
-    private int argIndex = 0;
     private final Map<Name, JCTree.JCVariableDecl> lambdaVarMap = new HashMap<>();
     private final Map<JCTree.JCLambda, JCTree.JCVariableDecl> lambdaCache = new HashMap<>();
 
     @Override
     public void visitLambda(JCTree.JCLambda tree)
     {
-        Symbol.MethodSymbol methodSymbol = methodSymbolDeque.peek();
-        if (methodSymbol == null)
+        Symbol.VarSymbol varSymbol = varSymbolDeque.peek();
+        if (varSymbol == null)
         {
             tryBoxLambda(tree);
             super.visitLambda(tree);
             return;
-        }
-        Symbol.VarSymbol varSymbol = methodSymbol.getParameters().get(argIndex);
+        };
         Expr expr = varSymbol.getAnnotation(Expr.class);
         // 没有注解说明不是表达式
         if (expr == null)
@@ -128,7 +125,7 @@ public class LambdaTreeScanner extends TreeTranslator
             return;
         }
         // 检查lambda类型
-        checkBody(expr.value(), tree.getBodyKind(), methodSymbol);
+        checkBody(expr.value(), tree.getBodyKind(), tree);
         // 收集lambda参数
         ListBuffer<JCTree.JCExpression> args = new ListBuffer<>();
         ListBuffer<Name> nameList = new ListBuffer<>();
@@ -236,12 +233,12 @@ public class LambdaTreeScanner extends TreeTranslator
         return methodSymbol;
     }
 
-    private void checkBody(Expr.BodyType value, LambdaExpressionTree.BodyKind bodyKind, Symbol.MethodSymbol methodSymbol)
+    private void checkBody(Expr.BodyType value, LambdaExpressionTree.BodyKind bodyKind, JCTree.JCLambda lambda)
     {
         if ((value == Expr.BodyType.Expr && bodyKind == LambdaExpressionTree.BodyKind.STATEMENT)
                 || (value == Expr.BodyType.Block && bodyKind == LambdaExpressionTree.BodyKind.EXPRESSION))
         {
-            throw new RuntimeException(String.format("期望的lambda类型为: %s,实际为: %s\n%s", value == Expr.BodyType.Expr ? "表达式" : "代码块", value == Expr.BodyType.Expr ? "代码块" : "表达式", methodSymbol));
+            throw new RuntimeException(String.format("期望的lambda类型为: %s,实际为: %s\n%s", value == Expr.BodyType.Expr ? "表达式" : "代码块", value == Expr.BodyType.Expr ? "代码块" : "表达式", lambda));
         }
     }
 
@@ -581,25 +578,6 @@ public class LambdaTreeScanner extends TreeTranslator
         }
         else if (tree instanceof JCTree.JCMethodInvocation)
         {
-//            JCTree.JCMethodInvocation jcMethodInvocation = (JCTree.JCMethodInvocation) tree;
-//            ListBuffer<JCTree.JCExpression> arguments = new ListBuffer<>();
-//            for (JCTree.JCExpression argument : jcMethodInvocation.getArguments())
-//            {
-//                arguments.add(deepMake(argument));
-//            }
-//            Symbol.MethodSymbol methodSymbol = methodInvocationGetMethodSymbol(jcMethodInvocation);
-//            ListBuffer<Type> argTypes = new ListBuffer<>();
-//            for (Symbol.VarSymbol parameter : methodSymbol.getParameters())
-//            {
-//                argTypes.add(parameter.type);
-//            }
-//            return treeMaker.App(
-//                    getFactoryMethod(
-//                            MethodCall,
-//                            argTypes.toList()
-//                    ),
-//                    arguments.toList()
-//            );
             JCTree.JCMethodInvocation jcMethodInvocation = (JCTree.JCMethodInvocation) tree;
             JCTree.JCExpression methodSelect = jcMethodInvocation.getMethodSelect();
             List<JCTree.JCExpression> arguments = jcMethodInvocation.getArguments();
@@ -609,15 +587,15 @@ public class LambdaTreeScanner extends TreeTranslator
             List<Symbol.VarSymbol> parameters = methodInvocationGetMethodSymbol.getParameters();
             for (int i = 0; i < arguments.size(); i++)
             {
+                Symbol.VarSymbol varSymbol = parameters.get(i);
+                varSymbolDeque.push(varSymbol);
+
                 JCTree.JCExpression argument = arguments.get(i);
                 JCTree.JCExpression jcExpression = deepMake(argument);
                 args.append(jcExpression);
-                Symbol.VarSymbol varSymbol = parameters.get(i);
-                Expr expr = varSymbol.getAnnotation(Expr.class);
-                if (argument instanceof JCTree.JCLambda && expr != null)
+                if (argument instanceof JCTree.JCLambda && lambdaCache.containsKey(argument))
                 {
                     JCTree.JCLambda jcLambda = (JCTree.JCLambda) argument;
-                    checkBody(expr.value(), jcLambda.getBodyKind(), methodInvocationGetMethodSymbol);
                     Symbol.MethodSymbol exprSymbol = getMethodSymbol(ExprTree.class, "Expr", Arrays.asList(Delegate.class, LambdaExpression.class));
                     JCTree.JCExpression fa = refMakeSelector(treeMaker.Ident(getClassSymbol(ExprTree.class)), exprSymbol);
                     JCTree.JCMethodInvocation apply = treeMaker.App(fa, List.of(jcLambda, jcExpression));
@@ -627,6 +605,7 @@ public class LambdaTreeScanner extends TreeTranslator
                 {
                     newArgs.add(argument);
                 }
+                varSymbolDeque.pop();
             }
             jcMethodInvocation.args = newArgs.toList();
             java.util.List<Class<?>> argTypes = Arrays.asList(Expression.class, Method.class, Expression[].class);

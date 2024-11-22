@@ -9,12 +9,9 @@ import com.sun.tools.javac.tree.TreeMaker;
 import com.sun.tools.javac.tree.TreeTranslator;
 import com.sun.tools.javac.util.List;
 import com.sun.tools.javac.util.ListBuffer;
-import com.sun.tools.javac.util.Name;
 import com.sun.tools.javac.util.Names;
 
 import java.util.ArrayDeque;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class LambdaFinder extends TreeTranslator
@@ -71,6 +68,7 @@ public class LambdaFinder extends TreeTranslator
             }
             statementsDeque.pop();
             tree.stats = statements.toList();
+            result = tree;
         }
         else
         {
@@ -106,7 +104,8 @@ public class LambdaFinder extends TreeTranslator
         }
         else
         {
-
+            LambdaTranslator lambdaTranslator = new LambdaTranslator(treeMaker, types, names, symtab, classReader, moduleSymbol, thizDeque, ownerDeque, varSymbolDeque, statementsDeque, argIndex);
+            result = lambdaTranslator.translateToExprTree(tree);
         }
     }
 

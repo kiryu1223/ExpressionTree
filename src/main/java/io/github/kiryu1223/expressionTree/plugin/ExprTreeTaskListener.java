@@ -122,8 +122,8 @@ public class ExprTreeTaskListener implements TaskListener
         {
             if (!(tree instanceof JCTree.JCClassDecl)) continue;
             JCTree.JCClassDecl classDecl = (JCTree.JCClassDecl) tree;
-            //Type thiz = classDecl.type;
             SugarScannerV2.resetIndex();
+            //classDecl.accept(new LambdaFinder(treeMaker, types, names, symtab, classReader, moduleSymbol));
             classDecl.accept(new LambdaTreeScanner(treeMaker, types, names, symtab, classReader, moduleSymbol));
             //classDecl.accept(new SugarScannerV2(treeMaker, types, names, symtab, classReader, moduleSymbol));
             //classDecl.accept(new SugarScanner(thiz, treeMaker, types, names, symtab, javaCompiler,classReader, moduleSymbol));

@@ -17,11 +17,10 @@ import io.github.kiryu1223.expressionTree.util.JDK;
 import io.github.kiryu1223.expressionTree.util.ReflectUtil;
 
 import javax.lang.model.element.ElementKind;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
-import java.util.ArrayDeque;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Map;
+import java.lang.reflect.Method;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static io.github.kiryu1223.expressionTree.expressions.Kind.*;
@@ -39,11 +38,11 @@ public class LambdaTranslator extends TreeTranslator
     private final ArrayDeque<Symbol.VarSymbol> varSymbolDeque;
     private final ArrayDeque<ListBuffer<JCTree.JCStatement>> statementsDeque;
     private final AtomicInteger argIndex;
-    private final Map<Name, JCTree.JCVariableDecl> lambdaVarMap;
-    private final Map<JCTree.JCLambda, JCTree.JCVariableDecl> lambdaCache;
-    private final ArrayDeque<ListBuffer<Name>> argNameDeque;
+    private final Map<Name, JCTree.JCVariableDecl> lambdaVarMap = new HashMap<>();
+    private final Map<JCTree.JCLambda, JCTree.JCVariableDecl> lambdaCache = new HashMap<>();
+    private final ArrayDeque<ListBuffer<Name>> argNameDeque = new ArrayDeque<>();
 
-    public LambdaTranslator(TreeMaker treeMaker, Types types, Names names, Symtab symtab, ClassReader classReader, Object moduleSymbol, ArrayDeque<Symbol> thizDeque, ArrayDeque<Symbol> ownerDeque, ArrayDeque<Symbol.VarSymbol> varSymbolDeque, ArrayDeque<ListBuffer<JCTree.JCStatement>> statementsDeque, AtomicInteger argIndex, Map<Name, JCTree.JCVariableDecl> lambdaVarMap, Map<JCTree.JCLambda, JCTree.JCVariableDecl> lambdaCache, ArrayDeque<ListBuffer<Name>> argNameDeque)
+    public LambdaTranslator(TreeMaker treeMaker, Types types, Names names, Symtab symtab, ClassReader classReader, Object moduleSymbol, ArrayDeque<Symbol> thizDeque, ArrayDeque<Symbol> ownerDeque, ArrayDeque<Symbol.VarSymbol> varSymbolDeque, ArrayDeque<ListBuffer<JCTree.JCStatement>> statementsDeque, AtomicInteger argIndex)
     {
         this.treeMaker = treeMaker;
         this.types = types;
@@ -56,9 +55,21 @@ public class LambdaTranslator extends TreeTranslator
         this.varSymbolDeque = varSymbolDeque;
         this.statementsDeque = statementsDeque;
         this.argIndex = argIndex;
-        this.lambdaVarMap = lambdaVarMap;
-        this.lambdaCache = lambdaCache;
-        this.argNameDeque = argNameDeque;
+    }
+
+    public JCTree.JCExpression translateToExprTree(JCTree.JCLambda tree)
+    {
+        JCTree.JCExpression expression = translateV(tree);
+        if (lambdaCache.containsKey(tree))
+        {
+            Symbol.MethodSymbol exprSymbol = getMethodSymbol(ExprTree.class, "Expr", Arrays.asList(Delegate.class, LambdaExpression.class));
+            JCTree.JCExpression fa = refMakeSelector(treeMaker.Ident(getClassSymbol(ExprTree.class)), exprSymbol);
+            return treeMaker.App(fa, List.of(tree, expression));
+        }
+        else
+        {
+            return tree;
+        }
     }
 
     public JCTree.JCExpression translateV(JCTree tree)
@@ -76,13 +87,88 @@ public class LambdaTranslator extends TreeTranslator
         }
     }
 
+    // 方法调用
+    @Override
+    public void visitApply(JCTree.JCMethodInvocation tree)
+    {
+        ListBuffer<JCTree.JCExpression> of = new ListBuffer<>();
+        JCTree.JCExpression methodSelect = tree.getMethodSelect();
+
+        Symbol.MethodSymbol methodSymbol = methodInvocationGetMethodSymbol(tree);
+        List<Symbol.VarSymbol> parameters = methodSymbol.getParameters();
+        List<JCTree.JCExpression> jcExpressions = tree.getArguments();
+        ListBuffer<JCTree.JCExpression> args = new ListBuffer<>();
+        ListBuffer<JCTree.JCExpression> newCode = new ListBuffer<>();
+        for (int i = 0; i < jcExpressions.size(); i++)
+        {
+            JCTree.JCExpression arg = jcExpressions.get(i);
+            varSymbolDeque.push(parameters.get(i));
+            JCTree.JCExpression jcExpression = translateV(arg);
+            args.add(jcExpression);
+            if (arg instanceof JCTree.JCLambda && lambdaCache.containsKey(arg))
+            {
+                JCTree.JCLambda jcLambda = (JCTree.JCLambda) arg;
+                Symbol.MethodSymbol exprSymbol = getMethodSymbol(ExprTree.class, "Expr", Arrays.asList(Delegate.class, LambdaExpression.class));
+                JCTree.JCExpression fa = refMakeSelector(treeMaker.Ident(getClassSymbol(ExprTree.class)), exprSymbol);
+                JCTree.JCMethodInvocation apply = treeMaker.App(fa, List.of(jcLambda, jcExpression));
+                newCode.add(apply);
+            }
+            else
+            {
+                newCode.add(arg);
+            }
+            varSymbolDeque.pop();
+        }
+        tree.args = newCode.toList();
+        // 获取方法名
+        String methodName = methodSelect instanceof JCTree.JCFieldAccess
+                ? ((JCTree.JCFieldAccess) methodSelect).getIdentifier().toString()
+                : methodSelect.toString();
+
+        // 获取所有参数的类型
+        ListBuffer<JCTree.JCExpression> ts = new ListBuffer<>();
+        for (Type parameterType : methodSelect.type.asMethodType().getParameterTypes())
+        {
+            ts.add(treeMaker.ClassLiteral(parameterType));
+        }
+
+        Symbol symbol;
+        if (methodSelect instanceof JCTree.JCFieldAccess)
+        {
+            JCTree.JCFieldAccess select = (JCTree.JCFieldAccess) methodSelect;
+            symbol = select.sym.location();
+            of.append(translateV(select.getExpression()));
+        }
+        else if (methodSelect instanceof JCTree.JCIdent)
+        {
+            JCTree.JCIdent select = (JCTree.JCIdent) methodSelect;
+            symbol = select.sym.location();
+            of.append(translateV(select));
+        }
+        else
+        {
+            throw new RuntimeException("意料之外的的表达式:" + tree);
+        }
+
+        of.append(reflectMethod(symbol.asType(), methodName, ts))
+                .append(makeArray(Expression.class, args.toList()));
+
+        result = treeMaker.App(
+                getFactoryMethod(
+                        MethodCall,
+                        Arrays.asList(Expression.class, Method.class, Expression[].class)
+                ),
+                of.toList()
+        );
+    }
+
     // lambda
     @Override
     public void visitLambda(JCTree.JCLambda tree)
     {
         Symbol.VarSymbol varSymbol = varSymbolDeque.peek();
         // 检查是否需要进行表达式树展开
-        if (varSymbol == null || varSymbol.getAnnotation(Expr.class) == null)
+        if (varSymbol.getAnnotation(Expr.class) == null)
         {
             // 表达式lambda必须包装成大括号lambda才能正常工作
             tryOpenLambda(tree);
@@ -95,26 +181,44 @@ public class LambdaTranslator extends TreeTranslator
             // 检测lambda类型是否符合约束
             checkBody(expr.value(), tree.getBodyKind(), tree);
             // 收集lambda参数
-            ListBuffer<Name> nameList = new ListBuffer<>();
+            ListBuffer<JCTree.JCExpression> args = new ListBuffer<>();
             for (JCTree.JCVariableDecl param : tree.params)
             {
                 // 为每个lambda入参创建一个局部变量
                 JCTree.JCVariableDecl localVar = getLocalVar(param.type, param.getName().toString());
                 // 以入参名作为key
                 lambdaVarMap.put(param.name, localVar);
-                // 记录一下入参名
-                nameList.add(param.name);
+                args.add(treeMaker.Ident(localVar));
             }
-            JCTree.JCExpression translate = (JCTree.JCExpression) translate(tree.body);
+            // 拿到当前代码块
+            ListBuffer<JCTree.JCStatement> peek = statementsDeque.peek();
+            // 解析
+            JCTree.JCExpression expression = translateV(tree.body);
+            // 获取lambda返回类型
+            Type.MethodType methodType = types.findDescriptorType(tree.type).asMethodType();
+            Type returnType = methodType.getReturnType();
+            // 创建一个表达式树的局部变量
+            JCTree.JCVariableDecl localLambdaExpr = getLocalLambdaExpr(
+                    expression,
+                    args,
+                    returnType,
+                    tree.type
+            );
+            // 添加到当前代码块
+            peek.add(localLambdaExpr);
+            // 缓存lambda表达式，后续用到
+            lambdaCache.put(tree, localLambdaExpr);
+            JCTree.JCExpression ident = treeMaker.Ident(localLambdaExpr);
 
-            Symbol.MethodSymbol exprSymbol = getMethodSymbol(ExprTree.class, "Expr", Arrays.asList(Delegate.class, LambdaExpression.class));
-            JCTree.JCExpression fa = refMakeSelector(treeMaker.Ident(getClassSymbol(ExprTree.class)), exprSymbol);
-            result = treeMaker.App(fa, List.of(tree, translate));
+//            Symbol.MethodSymbol exprSymbol = getMethodSymbol(ExprTree.class, "Expr", Arrays.asList(Delegate.class, LambdaExpression.class));
+//            JCTree.JCExpression fa = refMakeSelector(treeMaker.Ident(getClassSymbol(ExprTree.class)), exprSymbol);
+//            JCTree.JCMethodInvocation apply = treeMaker.App(fa, List.of(tree, ident));
+            result = ident;
 
             // 归还lambda参数
-            for (Name name : nameList)
+            for (JCTree.JCVariableDecl param : tree.params)
             {
-                lambdaVarMap.remove(name);
+                lambdaVarMap.remove(param.name);
             }
         }
     }
@@ -247,6 +351,424 @@ public class LambdaTranslator extends TreeTranslator
         result = treeMaker.App(
                 getFactoryMethod(Parens, Collections.singletonList(Expression.class)),
                 List.of(expr)
+        );
+    }
+
+    // 二元运算
+    @Override
+    public void visitBinary(JCTree.JCBinary tree)
+    {
+        JCTree.JCExpression left = translateV(tree.getLeftOperand());
+        JCTree.JCExpression right = translateV(tree.getRightOperand());
+        result = treeMaker.App(
+                getFactoryMethod(Binary, Arrays.asList(Expression.class, Expression.class, OperatorType.class)),
+                List.of(left, right, getOperator(tree.getTag()))
+        );
+    }
+
+    // 一元运算
+    @Override
+    public void visitUnary(JCTree.JCUnary tree)
+    {
+        JCTree.JCExpression expr = translateV(tree.getExpression());
+        result = treeMaker.App(
+                getFactoryMethod(Unary, Arrays.asList(Expression.class, OperatorType.class)),
+                List.of(expr, getOperator(tree.getTag()))
+        );
+    }
+
+    // 执行
+    @Override
+    public void visitExec(JCTree.JCExpressionStatement tree)
+    {
+        result = translateV(tree.getExpression());
+    }
+
+    // 三元表达式
+    @Override
+    public void visitConditional(JCTree.JCConditional tree)
+    {
+        JCTree.JCExpression cond = translateV(tree.getCondition());
+        JCTree.JCExpression ifTrue = translateV(tree.getTrueExpression());
+        JCTree.JCExpression ifFalse = translateV(tree.getFalseExpression());
+        result = treeMaker.App(
+                getFactoryMethod(Conditional, Arrays.asList(Expression.class, Expression.class, Expression.class)),
+                List.of(cond, ifTrue, ifFalse)
+        );
+    }
+
+    // 赋值
+    @Override
+    public void visitAssign(JCTree.JCAssign tree)
+    {
+        JCTree.JCExpression left = translateV(tree.getVariable());
+        JCTree.JCExpression right = translateV(tree.getExpression());
+        result = treeMaker.App(
+                getFactoryMethod(Assign, Arrays.asList(Expression.class, Expression.class)),
+                List.of(left, right)
+        );
+    }
+
+    // 自运算
+    @Override
+    public void visitAssignop(JCTree.JCAssignOp tree)
+    {
+        JCTree.JCExpression left = translateV(tree.getVariable());
+        JCTree.JCExpression right = translateV(tree.getExpression());
+        result = treeMaker.App(
+                getFactoryMethod(AssignOp, Arrays.asList(Expression.class, Expression.class, OperatorType.class)),
+                List.of(left, right, getOperator(tree.getTag()))
+        );
+    }
+
+    // If
+    @Override
+    public void visitIf(JCTree.JCIf tree)
+    {
+        ListBuffer<JCTree.JCExpression> args = new ListBuffer<>();
+        JCTree.JCExpression cond = translateV(tree.getCondition());
+        args.append(cond);
+        if (tree.getThenStatement() != null)
+        {
+            JCTree.JCExpression then = translateV(tree.getThenStatement());
+            args.append(then);
+        }
+        else
+        {
+            args.append(getNull());
+        }
+        if (tree.getElseStatement() != null)
+        {
+            JCTree.JCExpression elSe = translateV(tree.getElseStatement());
+            args.append(elSe);
+        }
+        else
+        {
+            args.append(getNull());
+        }
+        result = treeMaker.App(
+                getFactoryMethod(If, Arrays.asList(Expression.class, Expression.class, Expression.class)),
+                args.toList()
+        );
+    }
+
+    // 数组下标运算
+    @Override
+    public void visitIndexed(JCTree.JCArrayAccess tree)
+    {
+        JCTree.JCExpression indexed = translateV(tree.getExpression());
+        JCTree.JCExpression index = translateV(tree.getIndex());
+        result = treeMaker.App(
+                getFactoryMethod(Index, Arrays.asList(Expression.class, Expression.class)),
+                List.of(indexed, index)
+        );
+    }
+
+    // new对象
+    @Override
+    public void visitNewClass(JCTree.JCNewClass tree)
+    {
+        java.util.List<Class<?>> classes = new ArrayList<>(4);
+        ListBuffer<JCTree.JCExpression> all = new ListBuffer<>();
+
+        //class
+        classes.add(Class.class);
+        all.append(treeMaker.ClassLiteral(tree.type));
+
+        //typeArg
+        ListBuffer<JCTree.JCExpression> typeArgs = new ListBuffer<>();
+        if (tree.getIdentifier() instanceof JCTree.JCTypeApply)
+        {
+            JCTree.JCTypeApply typeApply = (JCTree.JCTypeApply) tree.getIdentifier();
+            for (JCTree.JCExpression typeArgument : typeApply.getTypeArguments())
+            {
+                typeArgs.append(treeMaker.ClassLiteral(typeArgument.type));
+            }
+        }
+        classes.add(Class[].class);
+        all.append(makeArray(Class.class, typeArgs.toList()));
+
+        //constructor
+        classes.add(Constructor.class);
+        Symbol.MethodSymbol init = (Symbol.MethodSymbol) tree.constructor;
+        ListBuffer<JCTree.JCExpression> types = new ListBuffer<>();
+        for (Symbol.VarSymbol parameter : init.getParameters())
+        {
+            types.add(treeMaker.ClassLiteral(parameter.asType()));
+        }
+        all.append(reflectConstructor(tree.type, types));
+
+        //arg
+        ListBuffer<JCTree.JCExpression> args = new ListBuffer<>();
+        for (JCTree.JCExpression argument : tree.getArguments())
+        {
+            args.append(translateV(argument));
+        }
+        classes.add(Expression[].class);
+        all.append(makeArray(Expression.class, args.toList()));
+
+        //body
+        JCTree.JCClassDecl classBody = tree.getClassBody();
+        classes.add(BlockExpression.class);
+        if (classBody != null)
+        {
+            ListBuffer<JCTree.JCExpression> body = new ListBuffer<>();
+            // 只记录字段
+            for (JCTree member : classBody.getMembers())
+            {
+                if (!(member instanceof JCTree.JCVariableDecl)) continue;
+                JCTree.JCVariableDecl variableDecl = (JCTree.JCVariableDecl) member;
+                JCTree.JCExpression variable = translateV(variableDecl);
+                body.add(variable);
+            }
+            all.append(treeMaker.App(
+                    getFactoryMethod(Block, Collections.singletonList(Expression[].class)),
+                    List.of(makeArray(Expression.class, body.toList()))
+            ));
+        }
+        else
+        {
+            all.append(getNull());
+        }
+
+        result = treeMaker.App(
+                getFactoryMethod(New, classes),
+                all.toList()
+        );
+    }
+
+    // new数组
+    @Override
+    public void visitNewArray(JCTree.JCNewArray tree)
+    {
+        ListBuffer<JCTree.JCExpression> dims = new ListBuffer<>();
+        ListBuffer<JCTree.JCExpression> args = new ListBuffer<>();
+        for (JCTree.JCExpression dimension : tree.getDimensions())
+        {
+            dims.append(translateV(dimension));
+        }
+        for (JCTree.JCExpression initializer : tree.getInitializers())
+        {
+            args.append(translateV(initializer));
+        }
+        result = treeMaker.App(
+                getFactoryMethod(NewArray, Arrays.asList(Class.class, Expression[].class, Expression[].class)),
+                List.of(
+                        treeMaker.ClassLiteral(tree.getType().type),
+                        makeArray(Expression.class, dims.toList()),
+                        makeArray(Expression.class, args.toList())
+                )
+        );
+    }
+
+    // return表达式
+    @Override
+    public void visitReturn(JCTree.JCReturn tree)
+    {
+        JCTree.JCExpression rt = translateV(tree.getExpression());
+        result = treeMaker.App(
+                getFactoryMethod(Return, Collections.singletonList(Expression.class)),
+                List.of(rt)
+        );
+    }
+
+    // 跳出语句
+    @Override
+    public void visitBreak(JCTree.JCBreak tree)
+    {
+        result = treeMaker.App(getFactoryMethod(Break, Collections.emptyList()));
+    }
+
+    // 跳转语句
+    @Override
+    public void visitContinue(JCTree.JCContinue tree)
+    {
+        result = treeMaker.App(getFactoryMethod(Continue, Collections.emptyList()));
+    }
+
+    // for循环
+    @Override
+    public void visitForLoop(JCTree.JCForLoop tree)
+    {
+        ListBuffer<JCTree.JCExpression> args = new ListBuffer<>();
+        ListBuffer<JCTree.JCExpression> inits = new ListBuffer<>();
+        for (JCTree.JCStatement jcStatement : tree.getInitializer())
+        {
+            inits.append(translateV(jcStatement));
+        }
+        args.append(makeArray(Expression.class, inits.toList()));
+        if (tree.getCondition() != null)
+        {
+            args.append(translateV(tree.getCondition()));
+        }
+        else
+        {
+            args.append(getNull());
+        }
+        ListBuffer<JCTree.JCExpression> steps = new ListBuffer<>();
+        for (JCTree.JCExpressionStatement expressionStatement : tree.getUpdate())
+        {
+            steps.append(translateV(expressionStatement));
+        }
+        args.append(makeArray(Expression.class, steps.toList()));
+        if (tree.getStatement() != null)
+        {
+            args.append(translateV(tree.getStatement()));
+        }
+        else
+        {
+            args.append(getNull());
+        }
+        result = treeMaker.App(
+                getFactoryMethod(For, Arrays.asList(Expression[].class, Expression.class, Expression[].class, Expression.class)),
+                args.toList()
+        );
+    }
+
+    // foreach循环
+    @Override
+    public void visitForeachLoop(JCTree.JCEnhancedForLoop tree)
+    {
+        JCTree.JCExpression var = translateV(tree.getVariable());
+        JCTree.JCExpression expr = translateV(tree.getExpression());
+        ListBuffer<JCTree.JCExpression> args = new ListBuffer<>();
+        args.append(var).append(expr);
+        if (tree.getStatement() != null)
+        {
+            args.append(translateV(tree.getStatement()));
+        }
+        else
+        {
+            args.append(getNull());
+        }
+        result = treeMaker.App(
+                getFactoryMethod(Foreach, Arrays.asList(VariableExpression.class, Expression.class, Expression.class)),
+                args.toList()
+        );
+    }
+
+    // while循环
+    @Override
+    public void visitWhileLoop(JCTree.JCWhileLoop tree)
+    {
+        ListBuffer<JCTree.JCExpression> args = new ListBuffer<>();
+        args.append(translateV(tree.getCondition()));
+        if (tree.getStatement() != null)
+        {
+            args.append(translateV(tree.getStatement()));
+        }
+        else
+        {
+            args.append(getNull());
+        }
+        result = treeMaker.App(
+                getFactoryMethod(While, Arrays.asList(Expression.class, Expression.class)),
+                args.toList()
+        );
+    }
+
+    // switch语句
+    @Override
+    public void visitSwitch(JCTree.JCSwitch tree)
+    {
+        JCTree.JCExpression selector = translateV(tree.getExpression());
+        ListBuffer<JCTree.JCExpression> cases = new ListBuffer<>();
+        for (JCTree.JCCase aCase : tree.getCases())
+        {
+            cases.append(translateV(aCase));
+        }
+        result = treeMaker.App(
+                getFactoryMethod(Switch, Arrays.asList(Expression.class, CaseExpression[].class)),
+                List.of(
+                        selector,
+                        makeArray(CaseExpression.class, cases.toList())
+                )
+        );
+    }
+
+    // case语句
+    @Override
+    public void visitCase(JCTree.JCCase tree)
+    {
+        JCTree.JCExpression part = translateV(tree.getExpression());
+        ListBuffer<JCTree.JCExpression> stats = new ListBuffer<>();
+        for (JCTree.JCStatement statement : tree.getStatements())
+        {
+            stats.append(translateV(statement));
+        }
+        result = treeMaker.App(
+                getFactoryMethod(Case, Arrays.asList(Expression.class, Expression[].class)),
+                List.of(
+                        part,
+                        makeArray(Expression.class, stats.toList())
+                )
+        );
+    }
+
+    // try语句
+    @Override
+    public void visitTry(JCTree.JCTry tree)
+    {
+        ListBuffer<JCTree.JCExpression> args = new ListBuffer<>();
+        args.append(translateV(tree.getBlock()));
+        ListBuffer<JCTree.JCExpression> catches = new ListBuffer<>();
+        for (JCTree.JCCatch aCatch : tree.getCatches())
+        {
+            catches.append(translateV(aCatch));
+        }
+        args.append(makeArray(CatchExpression.class, catches.toList()));
+        if (tree.getFinallyBlock() != null)
+        {
+            args.append(translateV(tree.getFinallyBlock()));
+        }
+        else
+        {
+            args.append(getNull());
+        }
+        ListBuffer<JCTree.JCExpression> resources = new ListBuffer<>();
+        for (JCTree resource : tree.getResources())
+        {
+            resources.append(translateV(resource));
+        }
+        args.append(makeArray(Expression.class, resources.toList()));
+        result = treeMaker.App(
+                getFactoryMethod(Try, Arrays.asList(BlockExpression.class, CatchExpression[].class, BlockExpression.class, Expression[].class)),
+                args.toList()
+        );
+    }
+
+    // catch语句
+    @Override
+    public void visitCatch(JCTree.JCCatch tree)
+    {
+        JCTree.JCExpression param = translateV(tree.getParameter());
+        JCTree.JCExpression body = translateV(tree.getBlock());
+        result = treeMaker.App(
+                getFactoryMethod(Catch, Arrays.asList(VariableExpression.class, BlockExpression.class)),
+                List.of(param, body)
+        );
+    }
+
+    // throw语句
+    @Override
+    public void visitThrow(JCTree.JCThrow tree)
+    {
+        JCTree.JCExpression expr = translateV(tree.getExpression());
+        result = treeMaker.App(
+                getFactoryMethod(Throw, Collections.singletonList(Expression.class)),
+                List.of(expr)
+        );
+    }
+
+    // 强制类型转换
+    @Override
+    public void visitTypeCast(JCTree.JCTypeCast tree)
+    {
+        JCTree.JCExpression target = translateV(tree.getType());
+        JCTree.JCExpression expr = translateV(tree.getExpression());
+        result = treeMaker.App(
+                getFactoryMethod(TypeCast, Arrays.asList(Class.class, Expression.class)),
+                List.of(target, expr)
         );
     }
 
@@ -529,8 +1051,9 @@ public class LambdaTranslator extends TreeTranslator
 
     private JCTree.JCNewArray makeArray(Class<?> clazz, List<JCTree.JCExpression> args)
     {
-        return (JCTree.JCNewArray) treeMaker.NewArray(treeMaker.Ident(getClassSymbol(clazz)), List.nil(), args)
-                .setType(types.makeArrayType(getType(clazz)));
+        JCTree.JCNewArray jcNewArray = treeMaker.NewArray(treeMaker.Ident(getClassSymbol(clazz)), List.nil(), args);
+        jcNewArray.setType(types.makeArrayType(getType(clazz)));
+        return jcNewArray;
     }
 
     private JCTree.JCVariableDecl getLocalVar(Type type, String name)
