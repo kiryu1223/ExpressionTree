@@ -1,7 +1,9 @@
 package io.github.kiryu1223.expressionTree.plugin;
 
+import com.sun.source.tree.LambdaExpressionTree;
 import com.sun.tools.javac.code.Symbol;
 import com.sun.tools.javac.code.Symtab;
+import com.sun.tools.javac.code.Type;
 import com.sun.tools.javac.code.Types;
 import com.sun.tools.javac.jvm.ClassReader;
 import com.sun.tools.javac.tree.JCTree;
@@ -10,8 +12,10 @@ import com.sun.tools.javac.tree.TreeTranslator;
 import com.sun.tools.javac.util.List;
 import com.sun.tools.javac.util.ListBuffer;
 import com.sun.tools.javac.util.Names;
+import io.github.kiryu1223.expressionTree.expressions.annos.Expr;
 
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class LambdaFinder extends TreeTranslator
@@ -52,7 +56,6 @@ public class LambdaFinder extends TreeTranslator
         ownerDeque.push(tree.sym);
         super.visitMethodDef(tree);
         ownerDeque.pop();
-        System.out.println(tree);
     }
 
     @Override
@@ -84,12 +87,26 @@ public class LambdaFinder extends TreeTranslator
         List<Symbol.VarSymbol> parameters = methodSymbol.getParameters();
         ListBuffer<JCTree.JCExpression> args = new ListBuffer<>();
         List<JCTree.JCExpression> jcExpressions = tree.getArguments();
+        boolean changed = false;
+        ListBuffer<Type> argsType = new ListBuffer<>();
         for (int i = 0; i < jcExpressions.size(); i++)
         {
             JCTree.JCExpression arg = jcExpressions.get(i);
-            varSymbolDeque.push(parameters.get(i));
-            args.add(translate(arg));
+            Symbol.VarSymbol varSymbol = parameters.get(i);
+            varSymbolDeque.push(varSymbol);
+            if (arg instanceof JCTree.JCLambda && varSymbol.getAnnotation(Expr.class) != null)
+            {
+                changed = true;
+            }
+            JCTree.JCExpression translate = translate(arg);
+            argsType.add(translate.type);
+            args.add(translate);
             varSymbolDeque.pop();
+        }
+        if (changed)
+        {
+            Symbol.MethodSymbol targetMethodSymbol = getTargetMethodSymbol(methodSymbol, argsType);
+            trySetMethodSymbol(tree, targetMethodSymbol);
         }
         tree.args = args.toList();
         result = tree;
@@ -98,14 +115,24 @@ public class LambdaFinder extends TreeTranslator
     @Override
     public void visitLambda(JCTree.JCLambda tree)
     {
-        if (ownerDeque.isEmpty())
+        if (ownerDeque.isEmpty() || varSymbolDeque.isEmpty())
         {
+            tryOpenLambda(tree);
             super.visitLambda(tree);
         }
         else
         {
-            LambdaTranslator lambdaTranslator = new LambdaTranslator(treeMaker, types, names, symtab, classReader, moduleSymbol, thizDeque, ownerDeque, varSymbolDeque, statementsDeque, argIndex);
-            result = lambdaTranslator.translateToExprTree(tree);
+            Symbol.VarSymbol varSymbol = varSymbolDeque.peek();
+            if (varSymbol.getAnnotation(Expr.class) != null)
+            {
+                LambdaTranslator lambdaTranslator = new LambdaTranslator(treeMaker, types, names, symtab, classReader, moduleSymbol, thizDeque, ownerDeque, varSymbolDeque, statementsDeque, argIndex);
+                result = lambdaTranslator.translateToExprTree(tree);
+            }
+            else
+            {
+                tryOpenLambda(tree);
+                super.visitLambda(tree);
+            }
         }
     }
 
@@ -124,5 +151,94 @@ public class LambdaFinder extends TreeTranslator
             methodSymbol = (Symbol.MethodSymbol) select.sym;
         }
         return methodSymbol;
+    }
+
+    private void tryOpenLambda(JCTree.JCLambda tree)
+    {
+        if (tree.getBodyKind() == LambdaExpressionTree.BodyKind.EXPRESSION)
+        {
+            JCTree.JCExpression body = (JCTree.JCExpression) tree.getBody();
+            Type lambdaReturnType = getLambdaReturnType(tree);
+            // (...) void
+            if (lambdaReturnType == symtab.voidType)
+            {
+                JCTree.JCExpressionStatement exec = treeMaker.Exec(body);
+                tree.body = treeMaker.Block(0, List.of(exec));
+            }
+            // (...) not void
+            else
+            {
+                JCTree.JCReturn aReturn = treeMaker.Return(body);
+                tree.body = treeMaker.Block(0, List.of(aReturn));
+            }
+        }
+    }
+
+    private Type getLambdaReturnType(JCTree.JCLambda lambda)
+    {
+        Type descriptorType = types.findDescriptorType(lambda.type);
+        Type.MethodType methodType = descriptorType.asMethodType();
+        return methodType.getReturnType();
+    }
+
+    private boolean typesEqual(java.util.List<Type> left, java.util.List<Type> right)
+    {
+        if (left.size() != right.size())
+        {
+            return false;
+        }
+        for (int i = 0; i < left.size(); i++)
+        {
+            Type leftType = left.get(i);
+            Type rightType = right.get(i);
+            if (!leftType.toString().equals(rightType.toString()))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private Symbol.MethodSymbol getTargetMethodSymbol(Symbol.MethodSymbol methodSymbol, ListBuffer<Type> argsType)
+    {
+        Symbol location = methodSymbol.location();
+        for (Symbol enclosedElement : location.getEnclosedElements())
+        {
+            if (!(enclosedElement instanceof Symbol.MethodSymbol)) continue;
+            Symbol.MethodSymbol element = (Symbol.MethodSymbol) enclosedElement;
+            if (!element.getSimpleName().equals(methodSymbol.getSimpleName())) continue;
+            if (element.getParameters().size() != methodSymbol.getParameters().size()) continue;
+            java.util.List<Type> varTypes = new ArrayList<>();
+            for (Symbol.VarSymbol parameter : element.getParameters())
+            {
+                varTypes.add(types.erasure(parameter.asType()));
+            }
+            java.util.List<Type> argTypes = new ArrayList<>();
+            for (Type type : argsType)
+            {
+                argTypes.add(types.erasure(type));
+            }
+            boolean subtypes = typesEqual(varTypes, argTypes);
+            if (subtypes)
+            {
+                return element;
+            }
+        }
+        throw new RuntimeException();
+    }
+
+    private void trySetMethodSymbol(JCTree.JCMethodInvocation tree, Symbol.MethodSymbol methodSymbol)
+    {
+        JCTree.JCExpression methodSelect = tree.getMethodSelect();
+        if (methodSelect instanceof JCTree.JCFieldAccess)
+        {
+            JCTree.JCFieldAccess select = (JCTree.JCFieldAccess) methodSelect;
+            select.sym = methodSymbol;
+        }
+        else
+        {
+            JCTree.JCIdent select = (JCTree.JCIdent) methodSelect;
+            select.sym = methodSymbol;
+        }
     }
 }
