@@ -143,7 +143,25 @@ public class LambdaTranslator extends TreeTranslator
         else if (methodSelect instanceof JCTree.JCIdent)
         {
             JCTree.JCIdent select = (JCTree.JCIdent) methodSelect;
-            of.append(translateV(select));
+            //of.append(translateV(select));
+            if (methodSymbol.isStatic())
+            {
+                of.append(
+                        treeMaker.App(
+                                getFactoryMethod(StaticClass, Collections.singletonList(Class.class)),
+                                List.of(treeMaker.ClassLiteral(methodSymbol.location().asType()))
+                        )
+                );
+            }
+            else
+            {
+                of.append(
+                        treeMaker.App(
+                                getFactoryMethod(Reference, Arrays.asList(Object.class, String.class)),
+                                List.of(treeMaker.This(thizDeque.peek().type), treeMaker.Literal("this"))
+                        )
+                );
+            }
         }
         else
         {
@@ -1176,15 +1194,16 @@ public class LambdaTranslator extends TreeTranslator
     private void trySetMethodSymbol(JCTree.JCMethodInvocation tree, Symbol.MethodSymbol methodSymbol)
     {
         JCTree.JCExpression methodSelect = tree.getMethodSelect();
+        tree.setType(methodSymbol.getReturnType());
         if (methodSelect instanceof JCTree.JCFieldAccess)
         {
             JCTree.JCFieldAccess select = (JCTree.JCFieldAccess) methodSelect;
-            select.sym = methodSymbol;
+            tree.meth = refMakeSelector(select.getExpression(), methodSymbol);
         }
         else
         {
             JCTree.JCIdent select = (JCTree.JCIdent) methodSelect;
-            select.sym = methodSymbol;
+            tree.meth = treeMaker.Ident(methodSymbol);
         }
     }
 

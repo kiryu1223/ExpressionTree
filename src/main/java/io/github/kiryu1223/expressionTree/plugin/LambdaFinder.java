@@ -13,9 +13,11 @@ import com.sun.tools.javac.util.List;
 import com.sun.tools.javac.util.ListBuffer;
 import com.sun.tools.javac.util.Names;
 import io.github.kiryu1223.expressionTree.expressions.annos.Expr;
+import io.github.kiryu1223.expressionTree.util.ReflectUtil;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class LambdaFinder extends TreeTranslator
@@ -230,15 +232,21 @@ public class LambdaFinder extends TreeTranslator
     private void trySetMethodSymbol(JCTree.JCMethodInvocation tree, Symbol.MethodSymbol methodSymbol)
     {
         JCTree.JCExpression methodSelect = tree.getMethodSelect();
+        tree.setType(methodSymbol.getReturnType());
         if (methodSelect instanceof JCTree.JCFieldAccess)
         {
             JCTree.JCFieldAccess select = (JCTree.JCFieldAccess) methodSelect;
-            select.sym = methodSymbol;
+            tree.meth = refMakeSelector(select.getExpression(), methodSymbol);
         }
         else
         {
             JCTree.JCIdent select = (JCTree.JCIdent) methodSelect;
-            select.sym = methodSymbol;
+            tree.meth = treeMaker.Ident(methodSymbol);
         }
+    }
+
+    private JCTree.JCFieldAccess refMakeSelector(JCTree.JCExpression base, Symbol sym)
+    {
+        return ReflectUtil.invokeMethod(treeMaker, "Select", Arrays.asList(base, sym));
     }
 }
