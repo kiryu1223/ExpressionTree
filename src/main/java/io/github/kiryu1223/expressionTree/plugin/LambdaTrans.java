@@ -23,7 +23,6 @@ import java.lang.reflect.Method;
 import java.util.*;
 
 import static io.github.kiryu1223.expressionTree.expressions.Kind.*;
-import static io.github.kiryu1223.expressionTree.expressions.Kind.TypeCast;
 
 public class LambdaTrans extends TreeTranslator
 {
@@ -94,6 +93,7 @@ public class LambdaTrans extends TreeTranslator
         ListBuffer<JCTree.JCExpression> args = new ListBuffer<>();
         List<JCTree.JCExpression> jcExpressions = tree.getArguments();
         tree.meth = translate(tree.getMethodSelect());
+        changed = false;
         for (int i = 0; i < jcExpressions.size(); i++)
         {
             Symbol.VarSymbol varSymbol = parameters.get(i);
@@ -103,9 +103,21 @@ public class LambdaTrans extends TreeTranslator
             args.add(translate(arg));
             varSymbolDeque.pop();
         }
+        if (changed)
+        {
+            ListBuffer<Type> argsType = new ListBuffer<>();
+            for (JCTree.JCExpression arg : args)
+            {
+                argsType.add(arg.type);
+            }
+            Symbol.MethodSymbol targetMethodSymbol = getTargetMethodSymbol(methodSymbol, argsType);
+            trySetMethodSymbol(tree, targetMethodSymbol);
+        }
         tree.args = args.toList();
         result = tree;
     }
+
+    private boolean changed = false;
 
     // 把需要转换的lambda变成包装后的形式
     @Override
@@ -122,6 +134,11 @@ public class LambdaTrans extends TreeTranslator
             if (expr != null)
             {
                 checkBody(expr.value(), tree.getBodyKind(), tree);
+                JCTree.JCExpression expression = deepMake(tree);
+                Symbol.MethodSymbol exprSymbol = getMethodSymbol(ExprTree.class, "Expr", Arrays.asList(Delegate.class, LambdaExpression.class));
+                JCTree.JCExpression fa = refMakeSelector(treeMaker.Ident(getClassSymbol(ExprTree.class)), exprSymbol);
+                result = treeMaker.App(fa, List.of(tree, expression));
+                changed = true;
             }
             else
             {
@@ -182,17 +199,12 @@ public class LambdaTrans extends TreeTranslator
         }
         else if (tree instanceof JCTree.JCMethodInvocation)
         {
-            JCTree.JCMethodInvocation invocation=(JCTree.JCMethodInvocation)tree;
+            JCTree.JCMethodInvocation invocation = (JCTree.JCMethodInvocation) tree;
             ListBuffer<JCTree.JCExpression> of = new ListBuffer<>();
             JCTree.JCExpression methodSelect = invocation.getMethodSelect();
-
             Symbol.MethodSymbol methodSymbol = methodInvocationGetMethodSymbol(invocation);
-            List<Symbol.VarSymbol> parameters = methodSymbol.getParameters();
             List<JCTree.JCExpression> jcExpressions = invocation.getArguments();
             ListBuffer<JCTree.JCExpression> args = new ListBuffer<>();
-            ListBuffer<JCTree.JCExpression> newCode = new ListBuffer<>();
-            boolean changed = false;
-            ListBuffer<Type> argsType = new ListBuffer<>();
             for (JCTree.JCExpression arg : jcExpressions)
             {
                 args.add(deepMake(arg));
@@ -245,7 +257,7 @@ public class LambdaTrans extends TreeTranslator
             of.append(reflectMethod(methodSymbol.location().asType(), methodName, ts))
                     .append(makeArray(Expression.class, args.toList()));
 
-            result = treeMaker.App(
+            return treeMaker.App(
                     getFactoryMethod(
                             MethodCall,
                             Arrays.asList(Expression.class, Method.class, Expression[].class)
@@ -351,11 +363,18 @@ public class LambdaTrans extends TreeTranslator
         else if (tree instanceof JCTree.JCVariableDecl)
         {
             JCTree.JCVariableDecl jcVariableDecl = (JCTree.JCVariableDecl) tree;
+            ListBuffer<JCTree.JCStatement> statements = statementsDeque.peek();
+            Name name = jcVariableDecl.getName();
+            JCTree.JCVariableDecl localVar = getLocalVar(tree.type, name.toString());
+            lambdaVarMap.put(name, localVar);
+            statements.add(localVar);
             ListBuffer<JCTree.JCExpression> args = new ListBuffer<>();
-            args.append(treeMaker.Ident(lambdaVarMap.get(jcVariableDecl.getName())));
-            if (jcVariableDecl.getInitializer() != null)
+            args.append(treeMaker.Ident(localVar));
+            jcVariableDecl.getInitializer();
+            JCTree.JCExpression initializer = jcVariableDecl.getInitializer();
+            if (initializer != null)
             {
-                args.append(deepMake(jcVariableDecl.getInitializer()));
+                args.append(deepMake(initializer));
             }
             else
             {
@@ -381,11 +400,9 @@ public class LambdaTrans extends TreeTranslator
             JCTree.JCNewClass jcNewClass = (JCTree.JCNewClass) tree;
             java.util.List<Class<?>> classes = new ArrayList<>(4);
             ListBuffer<JCTree.JCExpression> all = new ListBuffer<>();
-
             //class
             classes.add(Class.class);
             all.append(treeMaker.ClassLiteral(jcNewClass.type));
-
             //typeArg
             ListBuffer<JCTree.JCExpression> typeArgs = new ListBuffer<>();
             if (jcNewClass.getIdentifier() instanceof JCTree.JCTypeApply)
@@ -398,7 +415,6 @@ public class LambdaTrans extends TreeTranslator
             }
             classes.add(Class[].class);
             all.append(makeArray(Class.class, typeArgs.toList()));
-
             //constructor
             classes.add(Constructor.class);
             Symbol.MethodSymbol init = (Symbol.MethodSymbol) jcNewClass.constructor;
@@ -408,7 +424,6 @@ public class LambdaTrans extends TreeTranslator
                 types.add(treeMaker.ClassLiteral(parameter.asType()));
             }
             all.append(reflectConstructor(jcNewClass.type, types));
-
             //arg
             ListBuffer<JCTree.JCExpression> args = new ListBuffer<>();
             for (JCTree.JCExpression argument : jcNewClass.getArguments())
@@ -417,7 +432,6 @@ public class LambdaTrans extends TreeTranslator
             }
             classes.add(Expression[].class);
             all.append(makeArray(Expression.class, args.toList()));
-
             //body
             JCTree.JCClassDecl classBody = jcNewClass.getClassBody();
             classes.add(BlockExpression.class);
@@ -425,7 +439,8 @@ public class LambdaTrans extends TreeTranslator
             {
                 ListBuffer<JCTree.JCExpression> body = new ListBuffer<>();
                 // 只记录字段
-                for (JCTree member : classBody.getMembers())
+                List<JCTree> members = classBody.getMembers();
+                for (JCTree member : members)
                 {
                     if (!(member instanceof JCTree.JCVariableDecl)) continue;
                     JCTree.JCVariableDecl variableDecl = (JCTree.JCVariableDecl) member;
@@ -441,11 +456,11 @@ public class LambdaTrans extends TreeTranslator
             {
                 all.append(getNull());
             }
-
-            return treeMaker.App(
+            JCTree.JCMethodInvocation app = treeMaker.App(
                     getFactoryMethod(New, classes),
                     all.toList()
             );
+            return app;
         }
         else if (tree instanceof JCTree.JCNewArray)
         {
@@ -472,10 +487,9 @@ public class LambdaTrans extends TreeTranslator
         else if (tree instanceof JCTree.JCReturn)
         {
             JCTree.JCReturn jcReturn = (JCTree.JCReturn) tree;
-            JCTree.JCExpression result = deepMake(jcReturn.getExpression());
             return treeMaker.App(
                     getFactoryMethod(Return, Collections.singletonList(Expression.class)),
-                    List.of(result)
+                    List.of(deepMake(jcReturn.getExpression()))
             );
         }
         else if (tree instanceof JCTree.JCBreak)
@@ -709,7 +723,26 @@ public class LambdaTrans extends TreeTranslator
                 lambdaVarMap.put(param.name, localVar);
                 args.add(treeMaker.Ident(localVar));
             }
-            JCTree.JCExpression body = deepMake(lambda.getBody());
+            JCTree.JCExpression expression = deepMake(lambda.getBody());
+            // 获取lambda返回类型
+            Type.MethodType methodType = types.findDescriptorType(tree.type).asMethodType();
+            Type returnType = methodType.getReturnType();
+            // 创建一个表达式树的局部变量
+            JCTree.JCVariableDecl localLambdaExpr = getLocalLambdaExpr(
+                    expression,
+                    args,
+                    returnType,
+                    tree.type
+            );
+            // 添加到当前代码块
+            block.add(localLambdaExpr);
+            JCTree.JCExpression ident = treeMaker.Ident(localLambdaExpr);
+            // 归还lambda参数
+            for (JCTree.JCVariableDecl param : lambda.params)
+            {
+                lambdaVarMap.remove(param.name);
+            }
+            return ident;
         }
         throw new RuntimeException("不支持的类型:" + tree.type + "\n" + tree);
     }
