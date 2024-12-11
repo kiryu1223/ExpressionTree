@@ -88,11 +88,13 @@ public class LambdaTrans extends TreeTranslator
     @Override
     public void visitApply(JCTree.JCMethodInvocation tree)
     {
+        tree.meth = translate(tree.getMethodSelect());
+//        System.out.println(tree);
         Symbol.MethodSymbol methodSymbol = methodInvocationGetMethodSymbol(tree);
         List<Symbol.VarSymbol> parameters = methodSymbol.getParameters();
         ListBuffer<JCTree.JCExpression> args = new ListBuffer<>();
         List<JCTree.JCExpression> jcExpressions = tree.getArguments();
-        tree.meth = translate(tree.getMethodSelect());
+        ListBuffer<Type> argsType = new ListBuffer<>();
         changed = false;
         for (int i = 0; i < jcExpressions.size(); i++)
         {
@@ -100,20 +102,24 @@ public class LambdaTrans extends TreeTranslator
             varSymbolDeque.push(varSymbol);
             JCTree.JCExpression arg = jcExpressions.get(i);
             checkIsLambda(methodSymbol, varSymbol, arg);
-            args.add(translate(arg));
+            JCTree.JCExpression translate = translate(arg);
+            args.add(translate);
             varSymbolDeque.pop();
+
+            //泛型参数会有类型问题
+            if (varSymbol.getAnnotation(Expr.class) == null) {
+                argsType.add(varSymbol.asType());
+            }
+            else {
+                argsType.add(translate.type);
+            }
         }
         if (changed)
         {
-            ListBuffer<Type> argsType = new ListBuffer<>();
-            for (JCTree.JCExpression arg : args)
-            {
-                argsType.add(arg.type);
-            }
             Symbol.MethodSymbol targetMethodSymbol = getTargetMethodSymbol(methodSymbol, argsType);
             trySetMethodSymbol(tree, targetMethodSymbol);
+            tree.args = args.toList();
         }
-        tree.args = args.toList();
         result = tree;
     }
 
@@ -736,13 +742,12 @@ public class LambdaTrans extends TreeTranslator
             );
             // 添加到当前代码块
             block.add(localLambdaExpr);
-            JCTree.JCExpression ident = treeMaker.Ident(localLambdaExpr);
             // 归还lambda参数
             for (JCTree.JCVariableDecl param : lambda.params)
             {
                 lambdaVarMap.remove(param.name);
             }
-            return ident;
+            return treeMaker.Ident(localLambdaExpr);
         }
         throw new RuntimeException("不支持的类型:" + tree.type + "\n" + tree);
     }
@@ -1135,12 +1140,14 @@ public class LambdaTrans extends TreeTranslator
             java.util.List<Type> varTypes = new ArrayList<>();
             for (Symbol.VarSymbol parameter : element.getParameters())
             {
-                varTypes.add(types.erasure(parameter.asType()));
+                Type erasure = types.erasure(parameter.asType());
+                varTypes.add(erasure);
             }
             java.util.List<Type> argTypes = new ArrayList<>();
             for (Type type : argsType)
             {
-                argTypes.add(types.erasure(type));
+                Type erasure = types.erasure(type);
+                argTypes.add(erasure);
             }
             boolean subtypes = typesEqual(varTypes, argTypes);
             if (subtypes)
@@ -1148,7 +1155,7 @@ public class LambdaTrans extends TreeTranslator
                 return element;
             }
         }
-        throw new RuntimeException();
+        throw new RuntimeException(methodSymbol + " " + argsType);
     }
 
     private void trySetMethodSymbol(JCTree.JCMethodInvocation tree, Symbol.MethodSymbol methodSymbol)
