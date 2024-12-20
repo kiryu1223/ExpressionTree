@@ -89,38 +89,49 @@ public class LambdaTrans extends TreeTranslator
     public void visitApply(JCTree.JCMethodInvocation tree)
     {
         tree.meth = translate(tree.getMethodSelect());
-//        System.out.println(tree);
         Symbol.MethodSymbol methodSymbol = methodInvocationGetMethodSymbol(tree);
-        List<Symbol.VarSymbol> parameters = methodSymbol.getParameters();
-        ListBuffer<JCTree.JCExpression> args = new ListBuffer<>();
-        List<JCTree.JCExpression> jcExpressions = tree.getArguments();
-        ListBuffer<Type> argsType = new ListBuffer<>();
-        changed = false;
-        for (int i = 0; i < jcExpressions.size(); i++)
-        {
-            Symbol.VarSymbol varSymbol = parameters.get(i);
-            varSymbolDeque.push(varSymbol);
-            JCTree.JCExpression arg = jcExpressions.get(i);
-            checkIsLambda(methodSymbol, varSymbol, arg);
-            JCTree.JCExpression translate = translate(arg);
-            args.add(translate);
-            varSymbolDeque.pop();
+        if (methodSymbol.isVarArgs()) {
+            for (Symbol.VarSymbol parameter : methodSymbol.getParameters()) {
+                if (parameter.getAnnotation(Expr.class)!=null) {
+                    throw new RuntimeException("表达式树暂不支持变长参数:"+tree);
+                }
+            }
+            tree.args = translate(tree.args);
+            result = tree;
+        }
+        else {
+            List<Symbol.VarSymbol> parameters = methodSymbol.getParameters();
+            ListBuffer<JCTree.JCExpression> args = new ListBuffer<>();
+            List<JCTree.JCExpression> jcExpressions = tree.getArguments();
+            ListBuffer<Type> argsType = new ListBuffer<>();
+            changed = false;
+            for (int i = 0; i < jcExpressions.size(); i++)
+            {
+                Symbol.VarSymbol varSymbol = parameters.get(i);
+//            System.out.println(Flags.asFlagSet(varSymbol.flags())+" "+varSymbol.asType()+" "+varSymbol.getSimpleName());
+                varSymbolDeque.push(varSymbol);
+                JCTree.JCExpression arg = jcExpressions.get(i);
+                checkIsLambda(methodSymbol, varSymbol, arg);
+                JCTree.JCExpression translate = translate(arg);
+                args.add(translate);
+                varSymbolDeque.pop();
 
-            //泛型参数会有类型问题
-            if (varSymbol.getAnnotation(Expr.class) == null) {
-                argsType.add(varSymbol.asType());
+                //泛型参数会有类型问题
+                if (varSymbol.getAnnotation(Expr.class) == null) {
+                    argsType.add(varSymbol.asType());
+                }
+                else {
+                    argsType.add(translate.type);
+                }
             }
-            else {
-                argsType.add(translate.type);
+            if (changed)
+            {
+                Symbol.MethodSymbol targetMethodSymbol = getTargetMethodSymbol(methodSymbol, argsType);
+                trySetMethodSymbol(tree, targetMethodSymbol);
+                tree.args = args.toList();
             }
+            result = tree;
         }
-        if (changed)
-        {
-            Symbol.MethodSymbol targetMethodSymbol = getTargetMethodSymbol(methodSymbol, argsType);
-            trySetMethodSymbol(tree, targetMethodSymbol);
-            tree.args = args.toList();
-        }
-        result = tree;
     }
 
     private boolean changed = false;
@@ -129,6 +140,7 @@ public class LambdaTrans extends TreeTranslator
     @Override
     public void visitLambda(JCTree.JCLambda tree)
     {
+//        System.out.println(tree);
         if (varSymbolDeque.isEmpty())
         {
             super.visitLambda(tree);
@@ -148,7 +160,10 @@ public class LambdaTrans extends TreeTranslator
             }
             else
             {
+//                System.out.println(3);
                 super.visitLambda(tree);
+//                System.out.println(tree);
+//                System.out.println(4);
             }
         }
     }
