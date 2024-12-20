@@ -6,7 +6,7 @@
 
     <groupId>io.github.kiryu1223</groupId>
     <artifactId>ExpressionTree</artifactId>
-    <version>1.5.3</version>
+    <version>1.5.4</version>
 
     <name>ExpressionTree</name>
     <description>java static expressionTree</description>
