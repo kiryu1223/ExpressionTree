@@ -104,7 +104,7 @@ public class LambdaTrans extends TreeTranslator
             ListBuffer<JCTree.JCExpression> args = new ListBuffer<>();
             List<JCTree.JCExpression> jcExpressions = tree.getArguments();
             ListBuffer<Type> argsType = new ListBuffer<>();
-            changed = false;
+            booleanDeque.push(new boolean[]{false});
             for (int i = 0; i < jcExpressions.size(); i++)
             {
                 Symbol.VarSymbol varSymbol = parameters.get(i);
@@ -124,7 +124,7 @@ public class LambdaTrans extends TreeTranslator
                     argsType.add(translate.type);
                 }
             }
-            if (changed)
+            if (booleanDeque.pop()[0])
             {
                 Symbol.MethodSymbol targetMethodSymbol = getTargetMethodSymbol(methodSymbol, argsType);
                 trySetMethodSymbol(tree, targetMethodSymbol);
@@ -134,13 +134,12 @@ public class LambdaTrans extends TreeTranslator
         }
     }
 
-    private boolean changed = false;
+    private final Deque<boolean[]> booleanDeque = new ArrayDeque<>();
 
     // 把需要转换的lambda变成包装后的形式
     @Override
     public void visitLambda(JCTree.JCLambda tree)
     {
-//        System.out.println(tree);
         if (varSymbolDeque.isEmpty())
         {
             super.visitLambda(tree);
@@ -156,14 +155,11 @@ public class LambdaTrans extends TreeTranslator
                 Symbol.MethodSymbol exprSymbol = getMethodSymbol(ExprTree.class, "Expr", Arrays.asList(Delegate.class, LambdaExpression.class));
                 JCTree.JCExpression fa = refMakeSelector(treeMaker.Ident(getClassSymbol(ExprTree.class)), exprSymbol);
                 result = treeMaker.App(fa, List.of(tree, expression));
-                changed = true;
+                booleanDeque.peek()[0] = true;
             }
             else
             {
-//                System.out.println(3);
                 super.visitLambda(tree);
-//                System.out.println(tree);
-//                System.out.println(4);
             }
         }
     }
