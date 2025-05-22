@@ -166,6 +166,8 @@ public class LambdaTrans extends TreeTranslator
 
     private final Map<Name, JCTree.JCVariableDecl> lambdaVarMap = new HashMap<>();
 
+    private boolean inNewClassBlock=false;
+
     private JCTree.JCExpression deepMake(JCTree tree)
     {
         if (tree instanceof JCTree.JCPrimitiveTypeTree)
@@ -246,7 +248,6 @@ public class LambdaTrans extends TreeTranslator
             else if (methodSelect instanceof JCTree.JCIdent)
             {
                 JCTree.JCIdent select = (JCTree.JCIdent) methodSelect;
-                //of.append(translateV(select));
                 if (methodSymbol.isStatic())
                 {
                     of.append(
@@ -259,7 +260,7 @@ public class LambdaTrans extends TreeTranslator
                 else
                 {
                     of.append(
-                            treeMaker.App(
+                            inNewClassBlock?getNull():treeMaker.App(
                                     getFactoryMethod(Reference, Arrays.asList(Object.class, String.class)),
                                     List.of(treeMaker.This(thizDeque.peek().type), treeMaker.Literal("this"))
                             )
@@ -459,10 +460,16 @@ public class LambdaTrans extends TreeTranslator
                 List<JCTree> members = classBody.getMembers();
                 for (JCTree member : members)
                 {
-                    if (!(member instanceof JCTree.JCVariableDecl)) continue;
-                    JCTree.JCVariableDecl variableDecl = (JCTree.JCVariableDecl) member;
-                    JCTree.JCExpression variable = deepMake(variableDecl);
-                    body.add(variable);
+                    if (member instanceof JCTree.JCVariableDecl) {
+                        JCTree.JCVariableDecl variableDecl = (JCTree.JCVariableDecl) member;
+                        JCTree.JCExpression variable = deepMake(variableDecl);
+                        body.add(variable);
+                    }
+                    else if (member instanceof JCTree.JCBlock) {
+                        inNewClassBlock=true;
+                        body.add(deepMake(member));
+                        inNewClassBlock=false;
+                    }
                 }
                 all.append(treeMaker.App(
                         getFactoryMethod(Block, Collections.singletonList(Expression[].class)),
