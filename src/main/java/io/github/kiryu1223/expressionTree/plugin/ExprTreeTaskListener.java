@@ -12,6 +12,7 @@ import com.sun.tools.javac.util.ListBuffer;
 import com.sun.tools.javac.util.Names;
 import io.github.kiryu1223.expressionTree.expressions.annos.Getter;
 import io.github.kiryu1223.expressionTree.expressions.annos.Setter;
+import io.github.kiryu1223.expressionTree.expressions.annos.Where;
 import io.github.kiryu1223.expressionTree.ext.IExtensionService;
 import io.github.kiryu1223.expressionTree.util.JDK;
 import io.github.kiryu1223.expressionTree.util.ReflectUtil;
@@ -84,6 +85,16 @@ public class ExprTreeTaskListener implements TaskListener
         try
         {
             startedCallExtensionServices(event);
+            if (event.getKind() == TaskEvent.Kind.ANALYZE)
+            {
+                JCTree.JCCompilationUnit compilationUnit = (JCTree.JCCompilationUnit) event.getCompilationUnit();
+                for (JCTree typeDecl : compilationUnit.getTypeDecls())
+                {
+                    if (!(typeDecl instanceof JCTree.JCClassDecl)) continue;
+                    JCTree.JCClassDecl classDecl = (JCTree.JCClassDecl) typeDecl;
+                    checkWhere(classDecl);
+                }
+            }
         }
         catch (Throwable e)
         {
@@ -100,7 +111,6 @@ public class ExprTreeTaskListener implements TaskListener
             getterOrSetter(event);
             blockTaskMake(event);
             lambdaToTree(event);
-
             finishedCallExtensionServices(event);
         }
         catch (Throwable e)
@@ -272,5 +282,81 @@ public class ExprTreeTaskListener implements TaskListener
                 .collect(Collectors.toList());
         if (collect.size() != 1) return null;
         return collect.get(0);
+    }
+
+    private void checkWhere(JCTree.JCClassDecl classDecl)
+    {
+        JCTree.JCExpression extendsClause = classDecl.getExtendsClause();
+        List<JCTree.JCExpression> implementsClause = classDecl.getImplementsClause();
+        for (JCTree.JCExpression jcExpression : implementsClause)
+        {
+            if (jcExpression instanceof JCTree.JCTypeApply)
+            {
+                JCTree.JCTypeApply typeApply = (JCTree.JCTypeApply) jcExpression;
+                List<JCTree.JCExpression> typeArguments = typeApply.getTypeArguments();
+                JCTree.JCIdent type = (JCTree.JCIdent) typeApply.getType();
+                Symbol.ClassSymbol applySym = (Symbol.ClassSymbol) type.sym;
+                List<Symbol.TypeVariableSymbol> typeParameters = applySym.getTypeParameters();
+                for (int i = 0; i < typeParameters.size(); i++)
+                {
+                    Symbol.TypeVariableSymbol typeParameter = typeParameters.get(i);
+                    Where where = typeParameter.getAnnotation(Where.class);
+                    if (where != null)
+                    {
+                        io.github.kiryu1223.expressionTree.expressions.annos.Types value = where.value();
+                        JCTree.JCExpression typeA = typeArguments.get(i);
+                        Symbol.ClassSymbol symbol;
+                        if (typeA instanceof JCTree.JCIdent)
+                        {
+                            JCTree.JCIdent a = (JCTree.JCIdent) typeA;
+                            symbol = (Symbol.ClassSymbol) a.sym;
+                        }
+                        else
+                        {
+                            JCTree.JCTypeApply a = (JCTree.JCTypeApply) typeA;
+                            symbol = (Symbol.ClassSymbol) ((JCTree.JCIdent) a.getType()).sym;
+                        }
+                        switch (value)
+                        {
+                            case Class:
+                                if (symbol.isInterface())
+                                {
+                                    throw new RuntimeException(
+                                            String.format(
+                                                    "%s的泛型约束为%s,却获得了%s",
+                                                    applySym.asType(),
+                                                    "class",
+                                                    typeApply
+                                            )
+                                    );
+                                }
+                                break;
+                            case Interface:
+                                if (!symbol.isInterface())
+                                {
+                                    throw new RuntimeException(
+                                            String.format(
+                                                    "%s的泛型约束为%s,却获得了%s",
+                                                    applySym,
+                                                    "interface",
+                                                    typeApply
+                                            )
+                                    );
+                                }
+                                break;
+                        }
+                    }
+                }
+//                for (JCTree.JCExpression typeArgument : typeApply.getTypeArguments())
+//                {
+//                    if (typeArgument instanceof JCTree.JCIdent)
+//                    {
+//                        JCTree.JCIdent argument = (JCTree.JCIdent) typeArgument;
+//                        Symbol.ClassSymbol classSymbol = (Symbol.ClassSymbol) argument.sym;
+//
+//                    }
+//                }
+            }
+        }
     }
 }
