@@ -728,7 +728,7 @@ public class LambdaTrans extends TreeTranslator
             JCTree.JCExpression target = deepMake(jcTypeCast.getType());
             JCTree.JCExpression expr = deepMake(jcTypeCast.getExpression());
             return treeMaker.App(
-                    getFactoryMethod(TypeCast, Arrays.asList(Class.class, Expression.class)),
+                    getFactoryMethod(TypeCast, Arrays.asList(StaticClassExpression.class, Expression.class)),
                     List.of(target, expr)
             );
         }
