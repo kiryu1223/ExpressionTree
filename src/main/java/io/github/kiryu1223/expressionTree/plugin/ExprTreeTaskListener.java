@@ -246,7 +246,7 @@ public class ExprTreeTaskListener implements TaskListener {
 
         for (JCTree.JCImport anImport : imports) {
             JCTree qualid = anImport.qualid;
-            if (qualid.type == null) {
+            if (!anImport.isStatic() && qualid.type == null) {
                 JCTree.JCFieldAccess jcf = (JCTree.JCFieldAccess) qualid;
                 if (jcf.selected instanceof JCTree.JCFieldAccess) {
                     JCTree.JCFieldAccess selected = (JCTree.JCFieldAccess) jcf.selected;
