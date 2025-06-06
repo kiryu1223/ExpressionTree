@@ -237,6 +237,7 @@ public class ExprTreeTaskListener implements TaskListener {
     }
 
     private Type getTypeImport(String simpleName, List<JCTree.JCImport> imports) {
+        List<JCTree> qualids = new ArrayList<>();
         for (JCTree.JCImport i : imports) {
             JCTree qualid = ReflectUtil.getFieldValue(i, "qualid");
             if (!i.isStatic() && qualid.toString().endsWith("." + simpleName)) {
@@ -245,7 +246,7 @@ public class ExprTreeTaskListener implements TaskListener {
         }
 
         for (JCTree.JCImport anImport : imports) {
-            JCTree qualid = anImport.qualid;
+            JCTree qualid = ReflectUtil.getFieldValue(anImport, "qualid");
             if (!anImport.isStatic() && qualid.type == null) {
                 JCTree.JCFieldAccess jcf = (JCTree.JCFieldAccess) qualid;
                 if (jcf.selected instanceof JCTree.JCFieldAccess) {
