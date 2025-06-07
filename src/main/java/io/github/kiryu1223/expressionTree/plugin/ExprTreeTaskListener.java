@@ -1,5 +1,6 @@
 package io.github.kiryu1223.expressionTree.plugin;
 
+import com.sun.source.tree.Tree;
 import com.sun.source.util.TaskEvent;
 import com.sun.source.util.TaskListener;
 import com.sun.tools.javac.code.*;
@@ -21,9 +22,9 @@ import io.github.kiryu1223.expressionTree.util.ReflectUtil;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.ServiceLoader;
-import java.util.stream.Collectors;
 
-public class ExprTreeTaskListener implements TaskListener {
+public class ExprTreeTaskListener implements TaskListener
+{
     private final TreeMaker treeMaker;
     private final Types types;
     private final Names names;
@@ -34,7 +35,8 @@ public class ExprTreeTaskListener implements TaskListener {
     private final List<IExtensionService> extensionServices;
     //private final String[] compilerArgs;
 
-    public ExprTreeTaskListener(Context context) {
+    public ExprTreeTaskListener(Context context)
+    {
         treeMaker = TreeMaker.instance(context);
         types = Types.instance(context);
         names = Names.instance(context);
@@ -49,32 +51,40 @@ public class ExprTreeTaskListener implements TaskListener {
     }
 
     // 注册我的服务
-    private List<IExtensionService> registrarExtensionService(Context context) {
+    private List<IExtensionService> registrarExtensionService(Context context)
+    {
         ServiceLoader<IExtensionService> load = ServiceLoader.load(IExtensionService.class, ExprTreeTaskListener.class.getClassLoader());
         List<IExtensionService> iExtensionServices = new ArrayList<>();
-        for (IExtensionService iExtensionService : load) {
+        for (IExtensionService iExtensionService : load)
+        {
             iExtensionService.init(context);
             iExtensionServices.add(iExtensionService);
         }
         return iExtensionServices;
     }
 
-    private void startedCallExtensionServices(TaskEvent event) throws Throwable {
-        for (IExtensionService extensionService : extensionServices) {
+    private void startedCallExtensionServices(TaskEvent event) throws Throwable
+    {
+        for (IExtensionService extensionService : extensionServices)
+        {
             extensionService.started(event);
         }
     }
 
-    private void finishedCallExtensionServices(TaskEvent event) throws Throwable {
-        for (IExtensionService extensionService : extensionServices) {
+    private void finishedCallExtensionServices(TaskEvent event) throws Throwable
+    {
+        for (IExtensionService extensionService : extensionServices)
+        {
             extensionService.finished(event);
         }
     }
 
     @Override
-    public void started(TaskEvent event) {
+    public void started(TaskEvent event)
+    {
         //System.out.printf("%s 开始 %n", event.getKind());
-        try {
+        try
+        {
             startedCallExtensionServices(event);
 //            if (event.getKind() == TaskEvent.Kind.ANALYZE)
 //            {
@@ -86,32 +96,41 @@ public class ExprTreeTaskListener implements TaskListener {
 //                    checkWhere(classDecl);
 //                }
 //            }
-        } catch (Throwable e) {
+        }
+        catch (Throwable e)
+        {
             throw new RuntimeException(e);
         }
     }
 
     @Override
-    public void finished(TaskEvent event) {
+    public void finished(TaskEvent event)
+    {
         //System.out.printf("%s 结束 %n", event.getKind());
-        try {
+        try
+        {
             getterOrSetter(event);
             blockTaskMake(event);
             lambdaToTree(event);
             finishedCallExtensionServices(event);
-        } catch (Throwable e) {
+        }
+        catch (Throwable e)
+        {
             throw new RuntimeException(e);
         }
     }
 
-    private void lambdaToTree(TaskEvent event) {
+    private void lambdaToTree(TaskEvent event)
+    {
         if (event.getKind() != TaskEvent.Kind.ANALYZE) return;
         JCTree.JCCompilationUnit compilationUnit = (JCTree.JCCompilationUnit) event.getCompilationUnit();
         Object moduleSymbol = null;
-        if (JDK.is9orLater()) {
+        if (JDK.is9orLater())
+        {
             moduleSymbol = ReflectUtil.getFieldValue(compilationUnit, "modle");
         }
-        for (JCTree tree : compilationUnit.getTypeDecls()) {
+        for (JCTree tree : compilationUnit.getTypeDecls())
+        {
             if (!(tree instanceof JCTree.JCClassDecl)) continue;
             JCTree.JCClassDecl classDecl = (JCTree.JCClassDecl) tree;
             //SugarScannerV2.resetIndex();
@@ -123,20 +142,25 @@ public class ExprTreeTaskListener implements TaskListener {
         }
     }
 
-    private void blockTaskMake(TaskEvent event) {
+    private void blockTaskMake(TaskEvent event)
+    {
         if (event.getKind() != TaskEvent.Kind.PARSE) return;
         JCTree.JCCompilationUnit compilationUnit = (JCTree.JCCompilationUnit) event.getCompilationUnit();
-        for (JCTree tree : compilationUnit.getTypeDecls()) {
+        for (JCTree tree : compilationUnit.getTypeDecls())
+        {
             if (!(tree instanceof JCTree.JCClassDecl)) continue;
             JCTree.JCClassDecl classDecl = (JCTree.JCClassDecl) tree;
-            classDecl.accept(new TreeScanner() {
+            classDecl.accept(new TreeScanner()
+            {
                 @Override
-                public void visitMethodDef(JCTree.JCMethodDecl tree) {
+                public void visitMethodDef(JCTree.JCMethodDecl tree)
+                {
 
                 }
 
                 @Override
-                public void visitBlock(JCTree.JCBlock block) {
+                public void visitBlock(JCTree.JCBlock block)
+                {
                     treeMaker.at(block.pos);
                     JCTree.JCVariableDecl variableDecl = treeMaker.VarDef(
                             treeMaker.Modifiers(0),
@@ -153,38 +177,48 @@ public class ExprTreeTaskListener implements TaskListener {
         }
     }
 
-    private void getterOrSetter(TaskEvent event) {
+    private void getterOrSetter(TaskEvent event)
+    {
         if (event.getKind() != TaskEvent.Kind.ENTER) return;
         JCTree.JCCompilationUnit compilationUnit = (JCTree.JCCompilationUnit) event.getCompilationUnit();
         com.sun.tools.javac.util.List<JCTree.JCImport> imports = compilationUnit.getImports();
-        for (JCTree tree : compilationUnit.getTypeDecls()) {
+        for (JCTree tree : compilationUnit.getTypeDecls())
+        {
             if (!(tree instanceof JCTree.JCClassDecl)) continue;
             JCTree.JCClassDecl classDecl = (JCTree.JCClassDecl) tree;
-            classDecl.accept(new TreeScanner() {
+            classDecl.accept(new TreeScanner()
+            {
                 @Override
-                public void visitNewClass(JCTree.JCNewClass newClass) {
-                    if (newClass.getClassBody() != null) {
-                        Type type = getTypeImport(newClass.clazz.toString(), imports);
+                public void visitNewClass(JCTree.JCNewClass newClass)
+                {
+                    if (newClass.getClassBody() != null)
+                    {
+                        Type type = getTypeImport(newClass, imports);
                         if (type == null) return;
                         Symbol.TypeSymbol tsym = type.tsym;
                         if (tsym == null) return;
                         JCTree.JCClassDecl classBody = newClass.getClassBody();
                         ListBuffer<JCTree.JCVariableDecl> variableDecls = new ListBuffer<>();
                         List<String> methodDecls = new ArrayList<>();
-                        for (JCTree member : classBody.getMembers()) {
-                            if (member instanceof JCTree.JCVariableDecl) {
+                        for (JCTree member : classBody.getMembers())
+                        {
+                            if (member instanceof JCTree.JCVariableDecl)
+                            {
                                 JCTree.JCVariableDecl jcVariableDecl = (JCTree.JCVariableDecl) member;
                                 variableDecls.add(jcVariableDecl);
                             }
-                            else if (member instanceof JCTree.JCMethodDecl) {
+                            else if (member instanceof JCTree.JCMethodDecl)
+                            {
                                 JCTree.JCMethodDecl jcMethodDecl = (JCTree.JCMethodDecl) member;
                                 methodDecls.add(jcMethodDecl.getName().toString());
                             }
                         }
                         Getter getter = tsym.getAnnotation(Getter.class);
-                        if (getter != null) {
+                        if (getter != null)
+                        {
                             treeMaker.at(newClass.pos);
-                            for (JCTree.JCVariableDecl variableDecl : variableDecls) {
+                            for (JCTree.JCVariableDecl variableDecl : variableDecls)
+                            {
                                 String name = variableDecl.getName().toString();
                                 String get = "get" + name.substring(0, 1).toUpperCase() + name.substring(1);
                                 if (methodDecls.contains(get)) continue;
@@ -202,9 +236,11 @@ public class ExprTreeTaskListener implements TaskListener {
                             }
                         }
                         Setter setter = tsym.getAnnotation(Setter.class);
-                        if (setter != null) {
+                        if (setter != null)
+                        {
                             treeMaker.at(newClass.pos);
-                            for (JCTree.JCVariableDecl variableDecl : variableDecls) {
+                            for (JCTree.JCVariableDecl variableDecl : variableDecls)
+                            {
                                 String name = variableDecl.getName().toString();
                                 String set = "set" + name.substring(0, 1).toUpperCase() + name.substring(1);
                                 if (methodDecls.contains(set)) continue;
@@ -236,25 +272,45 @@ public class ExprTreeTaskListener implements TaskListener {
         }
     }
 
-    private Type getTypeImport(String simpleName, List<JCTree.JCImport> imports) {
-        for (JCTree.JCImport i : imports) {
+    private Type getTypeImport(JCTree.JCNewClass newClass, List<JCTree.JCImport> imports)
+    {
+        JCTree.JCExpression clazz = newClass.clazz;
+        String simpleName;
+        if (clazz.getKind() == Tree.Kind.IDENTIFIER)
+        {
+            JCTree.JCIdent ident = (JCTree.JCIdent) clazz;
+            simpleName = ident.getName().toString();
+        }
+        else
+        {
+            JCTree.JCTypeApply typeApply = (JCTree.JCTypeApply) clazz;
+            simpleName = typeApply.getType().toString();
+        }
+
+        for (JCTree.JCImport i : imports)
+        {
             JCTree qualid = ReflectUtil.getFieldValue(i, "qualid");
-            if (!i.isStatic() && qualid.toString().endsWith("." + simpleName)) {
+            if (!i.isStatic() && qualid.toString().endsWith("." + simpleName))
+            {
                 return qualid.type;
             }
         }
 
-        for (JCTree.JCImport anImport : imports) {
+        for (JCTree.JCImport anImport : imports)
+        {
             JCTree qualid = ReflectUtil.getFieldValue(anImport, "qualid");
-            if (!anImport.isStatic() && qualid.type == null) {
+            if (!anImport.isStatic() && qualid.type == null)
+            {
                 JCTree.JCFieldAccess jcf = (JCTree.JCFieldAccess) qualid;
-                if (jcf.selected instanceof JCTree.JCFieldAccess) {
+                if (jcf.selected instanceof JCTree.JCFieldAccess)
+                {
                     JCTree.JCFieldAccess selected = (JCTree.JCFieldAccess) jcf.selected;
                     Symbol.PackageSymbol packageSymbol = (Symbol.PackageSymbol) selected.sym;
                     Name packageName = packageSymbol.getQualifiedName();
                     String fullName = packageName + "." + simpleName;
                     Scope members = packageSymbol.members();
-                    for (Symbol element : members.getElements(m -> m.getQualifiedName().toString().equals(fullName))) {
+                    for (Symbol element : members.getElements(m -> m.getQualifiedName().toString().equals(fullName)))
+                    {
                         return element.type;
                     }
                 }
@@ -264,34 +320,43 @@ public class ExprTreeTaskListener implements TaskListener {
         return null;
     }
 
-    private void checkWhere(JCTree.JCClassDecl classDecl) {
+    private void checkWhere(JCTree.JCClassDecl classDecl)
+    {
         JCTree.JCExpression extendsClause = classDecl.getExtendsClause();
         List<JCTree.JCExpression> implementsClause = classDecl.getImplementsClause();
-        for (JCTree.JCExpression jcExpression : implementsClause) {
-            if (jcExpression instanceof JCTree.JCTypeApply) {
+        for (JCTree.JCExpression jcExpression : implementsClause)
+        {
+            if (jcExpression instanceof JCTree.JCTypeApply)
+            {
                 JCTree.JCTypeApply typeApply = (JCTree.JCTypeApply) jcExpression;
                 List<JCTree.JCExpression> typeArguments = typeApply.getTypeArguments();
                 JCTree.JCIdent type = (JCTree.JCIdent) typeApply.getType();
                 Symbol.ClassSymbol applySym = (Symbol.ClassSymbol) type.sym;
                 List<Symbol.TypeVariableSymbol> typeParameters = applySym.getTypeParameters();
-                for (int i = 0; i < typeParameters.size(); i++) {
+                for (int i = 0; i < typeParameters.size(); i++)
+                {
                     Symbol.TypeVariableSymbol typeParameter = typeParameters.get(i);
                     Where where = typeParameter.getAnnotation(Where.class);
-                    if (where != null) {
+                    if (where != null)
+                    {
                         io.github.kiryu1223.expressionTree.expressions.annos.Types value = where.value();
                         JCTree.JCExpression typeA = typeArguments.get(i);
                         Symbol.ClassSymbol symbol;
-                        if (typeA instanceof JCTree.JCIdent) {
+                        if (typeA instanceof JCTree.JCIdent)
+                        {
                             JCTree.JCIdent a = (JCTree.JCIdent) typeA;
                             symbol = (Symbol.ClassSymbol) a.sym;
                         }
-                        else {
+                        else
+                        {
                             JCTree.JCTypeApply a = (JCTree.JCTypeApply) typeA;
                             symbol = (Symbol.ClassSymbol) ((JCTree.JCIdent) a.getType()).sym;
                         }
-                        switch (value) {
+                        switch (value)
+                        {
                             case Class:
-                                if (symbol.isInterface()) {
+                                if (symbol.isInterface())
+                                {
                                     throw new RuntimeException(
                                             String.format(
                                                     "%s的泛型约束为%s,却获得了%s",
@@ -303,7 +368,8 @@ public class ExprTreeTaskListener implements TaskListener {
                                 }
                                 break;
                             case Interface:
-                                if (!symbol.isInterface()) {
+                                if (!symbol.isInterface())
+                                {
                                     throw new RuntimeException(
                                             String.format(
                                                     "%s的泛型约束为%s,却获得了%s",
