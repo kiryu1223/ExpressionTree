@@ -458,10 +458,12 @@ public class LambdaTrans extends TreeTranslator
                 ListBuffer<JCTree.JCExpression> body = new ListBuffer<>();
                 // 只记录字段
                 List<JCTree> members = classBody.getMembers();
+                ListBuffer<Name> local = new ListBuffer<>();
                 for (JCTree member : members)
                 {
                     if (member instanceof JCTree.JCVariableDecl) {
                         JCTree.JCVariableDecl variableDecl = (JCTree.JCVariableDecl) member;
+                        local.add(variableDecl.getName());
                         JCTree.JCExpression variable = deepMake(variableDecl);
                         body.add(variable);
                     }
@@ -470,6 +472,10 @@ public class LambdaTrans extends TreeTranslator
                         body.add(deepMake(member));
                         inNewClassBlock=false;
                     }
+                }
+                for (Name name : local)
+                {
+                    lambdaVarMap.remove(name);
                 }
                 all.append(treeMaker.App(
                         getFactoryMethod(Block, Collections.singletonList(Expression[].class)),
