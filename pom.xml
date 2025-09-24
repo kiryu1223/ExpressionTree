@@ -31,11 +31,11 @@
     <distributionManagement>
         <snapshotRepository>
             <id>release</id>
-            <url>https://s01.oss.sonatype.org/content/repositories/snapshots</url>
+            <url>https://ossrh-staging-api.central.sonatype.com/content/repositories/snapshots</url>
         </snapshotRepository>
         <repository>
             <id>release</id>
-            <url>https://s01.oss.sonatype.org/service/local/staging/deploy/maven2/</url>
+            <url>https://ossrh-staging-api.central.sonatype.com/service/local/staging/deploy/maven2/</url>
         </repository>
     </distributionManagement>
 
@@ -69,17 +69,14 @@
 
                     <!-- 6. 上传到sonatype的插件 -->
                     <plugin>
-                        <groupId>org.sonatype.plugins</groupId>
-                        <artifactId>nexus-staging-maven-plugin</artifactId>
-                        <version>1.6.7</version>
+                        <groupId>org.sonatype.central</groupId>
+                        <artifactId>central-publishing-maven-plugin</artifactId>
+                        <version>0.8.0</version>
                         <extensions>true</extensions>
                         <configuration>
-                            <!-- 这里的id必须要和全局配置中的server一致 -->
-                            <serverId>release</serverId>
-                            <!-- 这个地址，一定要和issue的评论中给出的地址一致！ -->
-                            <nexusUrl>https://s01.oss.sonatype.org/</nexusUrl>
-                            <!-- 如果希望发布后自动执行close和release操作，此处可以调整为true -->
-                            <autoReleaseAfterClose>true</autoReleaseAfterClose>
+                            <publishingServerId>release</publishingServerId>
+                            <!-- 是否自动发布，false需要在手动发布：https://central.sonatype.com/publishing -->
+                            <autoPublish>true</autoPublish>
                         </configuration>
                     </plugin>
 
